@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from dabox.activity import ActivityEntry, DayTotals, day_totals
 from dabox.limits import LimitsStatus
 from dabox.models import Game, MediaSource
 from dabox.services import Services, get_services, require_admin, require_box_client
@@ -35,6 +36,11 @@ class GameView(BaseModel):
     hidden: bool
     source: MediaSource
     stick_label: str | None
+
+
+class ActivityView(BaseModel):
+    totals: list[DayTotals]
+    entries: list[ActivityEntry]
 
 
 class ExtraTimeRequest(BaseModel):
@@ -116,3 +122,9 @@ def extra_time(body: ExtraTimeRequest, services: Services = Depends(get_services
 @admin_router.get("/games")
 def admin_games(services: Services = Depends(get_services)) -> list[GameView]:
     return game_views(services, "/api/admin/art", kid_view=False)
+
+
+@admin_router.get("/activity")
+def activity(services: Services = Depends(get_services)) -> ActivityView:
+    entries = services.limits.activity.recent(services.guide.now())
+    return ActivityView(totals=day_totals(entries), entries=entries)

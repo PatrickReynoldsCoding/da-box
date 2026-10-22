@@ -11,6 +11,7 @@ from dabox.channels import Guide
 from dabox.durations import Durations
 from dabox.library import LibraryIndex
 from dabox.limits_service import LimitsService
+from dabox.maintenance import Updater
 from dabox.metadata import MetadataService
 from dabox.models import Album, Film, Game
 from dabox.store import Store
@@ -33,6 +34,7 @@ class Services:
     durations: Durations
     guide: Guide
     limits: LimitsService
+    updater: Updater
     core_dirs: tuple[Path, ...]
     incoming_dir: Path
     admin_port: int

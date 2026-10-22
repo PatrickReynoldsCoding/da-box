@@ -41,6 +41,12 @@ func _ready() -> void:
 		tiles.add_child(tile)
 	column.add_child(tiles)
 
+	var bottom := HBoxContainer.new()
+	bottom.alignment = BoxContainer.ALIGNMENT_END
+	var mascot := Mascot.new()
+	bottom.add_child(mascot)
+	column.add_child(bottom)
+
 	_leave_parent_mode = Button.new()
 	_leave_parent_mode.text = "Leave parent mode"
 	_leave_parent_mode.size_flags_horizontal = Control.SIZE_SHRINK_CENTER

@@ -305,3 +305,7 @@ The **service** enforces all limits. If the UI crashes, the limits stay in force
 | 16 | Firewall for each user. NTP allowed. |
 | 17 | Service written in Python. |
 | 18 | First-run setup runs on the TV. Metadata accounts are added later in the admin app. |
+| 19 | (Made during the build, to confirm.) The night lasts from bedtime until 06:00. Video and games are locked then. |
+| 20 | (Made during the build, to confirm.) A video can start only if it ends before bedtime (or bedtime + n with bedtime overrun), the same as rule (c) for the quota. |
+| 21 | (Made during the build, to confirm.) If music plays when the quota is used up, the box waits until the music stops, then starts the quota shut-down. At bedtime, music stops too. |
+| 22 | (Made during the build.) System updates cover Debian packages only. Updating the da-box code itself is done with install.sh. |

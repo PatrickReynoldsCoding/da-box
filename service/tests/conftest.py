@@ -8,6 +8,7 @@ from dabox.config import ServiceConfig
 from dabox.services import Services
 from dabox.limits import PlayerSnapshot
 from dabox.limits_service import FakePower
+from dabox.maintenance import FakeUpdater
 from dabox.metadata import HttpError
 from dabox.system import FakeNetwork, FakeTimezone
 from dabox.usb import FakeUsb
@@ -26,14 +27,15 @@ class FakeAgent:
     def __init__(self) -> None:
         self.state = "idle"
         self.kind: str | None = None
+        self.title: str | None = None
         self.stopped = 0
         self.messages: list[str] = []
 
-    def play(self, kind: str) -> None:
-        self.state, self.kind = "playing", kind
+    def play(self, kind: str, title: str = "Something") -> None:
+        self.state, self.kind, self.title = "playing", kind, title
 
     def status(self) -> PlayerSnapshot:
-        return PlayerSnapshot(state=self.state, kind=self.kind)
+        return PlayerSnapshot(state=self.state, kind=self.kind, title=self.title)
 
     def stop(self) -> None:
         self.stopped += 1
@@ -142,7 +144,7 @@ def services(
         core_dirs=(tmp_path / "cores",),
     )
     write_file(tmp_path / "cores" / "nestopia_libretro.so", b"core")
-    return build_services(config, FakeNetwork(), timezone_backend, FakeUsb(usb_root), fake_http, fake_agent, fake_power)
+    return build_services(config, FakeNetwork(), timezone_backend, FakeUsb(usb_root), fake_http, fake_agent, fake_power, FakeUpdater())
 
 
 @pytest.fixture

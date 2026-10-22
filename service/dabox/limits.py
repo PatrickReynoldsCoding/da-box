@@ -188,6 +188,7 @@ class PlayerSnapshot(BaseModel):
 
     state: str
     kind: str | None
+    title: str | None = None
 
     @property
     def active(self) -> bool:

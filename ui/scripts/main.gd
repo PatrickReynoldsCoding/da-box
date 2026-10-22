@@ -154,7 +154,7 @@ func _make_parent_badge() -> Label:
 	badge.add_theme_font_size_override("font_size", 28)
 	badge.add_theme_color_override("font_color", UiTheme.BACKGROUND_TOP)
 	badge.add_theme_stylebox_override("normal", UiTheme.rounded_box(UiTheme.FOCUS, 16, 12))
-	badge.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 24)
-	badge.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	badge.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 24)
+	badge.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	badge.visible = false
 	return badge

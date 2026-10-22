@@ -4,7 +4,8 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from dabox import admin_api, box_api, guide_api, limits_api
+from dabox import admin_api, box_api, guide_api, limits_api, maintenance_api
+from dabox.activity import ActivityLog
 from dabox.auth import AdminAuth
 from dabox.background import BackgroundWorkers
 from dabox.box_state import BoxState
@@ -14,6 +15,7 @@ from dabox.config import ServiceConfig
 from dabox.library import LibraryIndex
 from dabox.limits import UsageStore
 from dabox.limits_service import AgentClient, FakePower, HttpAgentClient, LimitsService, PowerBackend, SystemdPower
+from dabox.maintenance import FakeUpdater, SystemdUpdater, Updater
 from dabox.metadata import HttpClient, MetadataService, MetadataStore, UrllibClient
 from dabox.services import Services
 from dabox.store import Store
@@ -38,6 +40,7 @@ def build_services(
     http_client: HttpClient,
     agent: AgentClient,
     power: PowerBackend,
+    updater: Updater,
 ) -> Services:
     store = Store(config.data_dir / "dabox.db")
     auth = AdminAuth(store)
@@ -55,7 +58,8 @@ def build_services(
         metadata=MetadataService(MetadataStore(store, config.data_dir / "art"), http_client),
         durations=durations,
         guide=guide,
-        limits=LimitsService(UsageStore(store), box_state, guide.now, agent, power),
+        limits=LimitsService(UsageStore(store), box_state, guide.now, agent, power, ActivityLog(store)),
+        updater=updater,
         core_dirs=config.core_dirs,
         incoming_dir=config.data_dir / "incoming",
         admin_port=config.port,
@@ -65,8 +69,12 @@ def build_services(
 def default_services(config: ServiceConfig) -> Services:
     agent = HttpAgentClient(config.agent_url)
     if config.dev_mode:
-        return build_services(config, FakeNetwork(), FakeTimezone(), FakeUsb(config.fake_usb_dir), UrllibClient(), agent, FakePower())
-    return build_services(config, NmcliNetwork(), TimedatectlTimezone(), UdisksUsb(), UrllibClient(), agent, SystemdPower())
+        return build_services(
+            config, FakeNetwork(), FakeTimezone(), FakeUsb(config.fake_usb_dir), UrllibClient(), agent, FakePower(), FakeUpdater(),
+        )
+    return build_services(
+        config, NmcliNetwork(), TimedatectlTimezone(), UdisksUsb(), UrllibClient(), agent, SystemdPower(), SystemdUpdater(),
+    )
 
 
 def create_app(services: Services, run_workers: bool = True) -> FastAPI:
@@ -93,5 +101,6 @@ def create_app(services: Services, run_workers: bool = True) -> FastAPI:
     app.include_router(guide_api.admin_router)
     app.include_router(limits_api.box_router)
     app.include_router(limits_api.admin_router)
+    app.include_router(maintenance_api.admin_router)
     app.mount("/", StaticFiles(directory=ADMIN_WEB_DIR, html=True), name="admin-web")
     return app

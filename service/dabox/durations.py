@@ -67,6 +67,10 @@ class Durations:
             self._store.put(_DURATIONS_KEY, self._cache)
         return measured
 
+    def reload(self) -> None:
+        """After a restore, the store holds other durations."""
+        self._cache = self._store.get(_DURATIONS_KEY) or {}
+
     def record(self, fingerprint: str, seconds: float) -> None:
         self._cache[fingerprint] = seconds
         self._store.put(_DURATIONS_KEY, self._cache)

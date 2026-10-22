@@ -1,0 +1,17 @@
+#!/bin/bash
+# Updates the Debian packages on the box. Started by the parent from the admin app
+# (dabox-update.service). The firewall opens only while this runs.
+set -euo pipefail
+
+close_firewall() {
+  echo "Closing the firewall again."
+  systemctl restart nftables
+}
+trap close_firewall EXIT
+
+echo "Opening the firewall for the update."
+nft delete table inet dabox 2>/dev/null || true
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get -y -o Dpkg::Options::=--force-confold upgrade
+echo "Update finished."

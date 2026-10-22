@@ -39,6 +39,7 @@
         <button data-tab="channels">Channels</button>
         <button data-tab="guide">Guide</button>
         <button data-tab="upload">Upload</button>
+        <button data-tab="activity">Activity</button>
         <button data-tab="settings">Settings</button>
       </nav>
 
@@ -140,7 +141,36 @@
         </form>
       </div>
 
+      <div id="tab-activity" class="tab" hidden>
+        <div class="card">
+          <h2>Last 7 days</h2>
+          <table class="totals">
+            <thead><tr><th>Day</th><th>TV</th><th>Games</th><th>Music</th></tr></thead>
+            <tbody id="activity-totals"></tbody>
+          </table>
+        </div>
+        <div class="card">
+          <h2>What was played</h2>
+          <ul id="activity-list" class="plain activity"></ul>
+        </div>
+      </div>
+
       <div id="tab-settings" class="tab" hidden>
+        <form id="appearance-form" class="card">
+          <h2>Look and sound</h2>
+          <label>Colour theme
+            <select name="theme">
+              <option value="purple">Purple night</option>
+              <option value="ocean">Ocean</option>
+              <option value="forest">Forest</option>
+              <option value="sunset">Sunset</option>
+            </select>
+          </label>
+          <label class="check"><input name="sounds" type="checkbox"> Sounds when moving and picking</label>
+          <button type="submit">Save</button>
+          <p class="message"></p>
+        </form>
+
         <form id="settings-form" class="card">
           <h2>Limits</h2>
           <label>Daily quota (minutes) <input name="daily_quota_minutes" type="number" min="15" max="720" step="5" required></label>
@@ -178,6 +208,24 @@
           <button type="submit">Change PIN</button>
           <p class="message"></p>
         </form>
+
+        <div class="card">
+          <h2>Backup</h2>
+          <p class="muted">Settings, channels, guide, hidden items, details and art. Not the films, music and games themselves.</p>
+          <div class="row wrap">
+            <a class="button" id="backup-download" href="/api/admin/backup">Download a backup</a>
+            <label class="button secondary">Restore a backup <input id="restore-file" type="file" accept=".zip" hidden></label>
+          </div>
+          <p id="backup-message" class="message"></p>
+        </div>
+
+        <div class="card">
+          <h2>System update</h2>
+          <p class="muted">Installs Debian updates. The box opens its firewall only while the update runs.</p>
+          <button id="start-update" class="secondary">Update the box</button>
+          <p id="update-status" class="muted"></p>
+          <pre id="update-log" class="log" hidden></pre>
+        </div>
 
         <div class="card">
           <h2>Setup</h2>

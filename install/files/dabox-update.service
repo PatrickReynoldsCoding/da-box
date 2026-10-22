@@ -1,0 +1,7 @@
+[Unit]
+Description=da-box system update (started from the admin app)
+
+[Service]
+Type=oneshot
+ExecStart=/opt/dabox/bin/dabox-update
+TimeoutStartSec=3600

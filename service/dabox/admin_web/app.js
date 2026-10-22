@@ -42,7 +42,9 @@ function showTab(name) {
     button.classList.toggle("active", button.dataset.tab === name);
   }
   for (const tab of document.querySelectorAll(".tab")) tab.hidden = tab.id !== `tab-${name}`;
-  const loaders = { home: loadHome, content: loadContent, settings: loadSettings, channels: loadChannels, guide: loadGuide };
+  const loaders = {
+    home: loadHome, content: loadContent, settings: loadSettings, channels: loadChannels, guide: loadGuide, activity: loadActivity,
+  };
   loaders[name]?.();
 }
 
@@ -298,6 +300,8 @@ function renderDayRows(limits) {
 
 async function loadSettings() {
   loadAccounts();
+  loadAppearance();
+  loadUpdateStatus();
   const limits = await api("/settings");
   const form = $("#settings-form");
   form.daily_quota_minutes.value = limits.daily_quota_minutes;
@@ -790,6 +794,90 @@ async function openSlot(slot, channel) {
 }
 
 $("#programme-filter").addEventListener("input", renderProgrammeChoices);
+
+// ---- Activity ----
+
+const KIND_NAMES = { video: "TV / film", game: "Game", audio: "Music" };
+
+async function loadActivity() {
+  const activity = await api("/activity");
+  $("#activity-totals").replaceChildren(...activity.totals.map((day) => {
+    const row = document.createElement("tr");
+    for (const text of [day.day, `${day.video_minutes} min`, `${day.game_minutes} min`, `${day.music_minutes} min`]) {
+      const cell = document.createElement("td");
+      cell.textContent = text;
+      row.append(cell);
+    }
+    return row;
+  }));
+  const rows = activity.entries.map((entry) => {
+    const row = document.createElement("li");
+    const when = document.createElement("span");
+    when.className = "when";
+    when.textContent = `${entry.started.slice(5, 10)} ${entry.started.slice(11, 16)}`;
+    const what = document.createElement("span");
+    what.textContent = `${KIND_NAMES[entry.kind] ?? entry.kind}: ${entry.title}`;
+    const length = document.createElement("span");
+    length.className = "length";
+    length.textContent = `${Math.max(1, Math.round(entry.seconds / 60))} min`;
+    row.append(when, what, length);
+    return row;
+  });
+  $("#activity-list").replaceChildren(...rows);
+  $("#activity-list").classList.toggle("empty", rows.length === 0);
+  $("#activity-list").classList.toggle("items", rows.length === 0);
+}
+
+// ---- Appearance, backup, update ----
+
+async function loadAppearance() {
+  const appearance = await api("/appearance");
+  const form = $("#appearance-form");
+  form.theme.value = appearance.theme;
+  form.sounds.checked = appearance.sounds;
+}
+
+$("#appearance-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.target;
+  await api("/appearance", { method: "PUT", body: { theme: form.theme.value, sounds: form.sounds.checked } });
+  setMessage($(".message", form), "Saved. The TV changes in a few seconds.", "ok");
+});
+
+$("#restore-file").addEventListener("change", async (event) => {
+  const file = event.target.files[0];
+  event.target.value = "";
+  if (!file || !confirm("Restore this backup? It replaces all settings, channels and the guide.")) return;
+  const body = new FormData();
+  body.append("backup_file", file);
+  const response = await fetch("/api/admin/restore", { method: "POST", body });
+  const result = await response.json();
+  setMessage($("#backup-message"), response.ok ? "Restored." : result.detail, response.ok ? "ok" : "error");
+});
+
+let updatePoll = null;
+
+function renderUpdate(status) {
+  $("#update-status").textContent = status.running ? "Updating… this can take some minutes." : (status.last_result ? `Last update: ${status.last_result}. The log below shows when.` : "No update yet.");
+  $("#start-update").disabled = status.running;
+  $("#update-log").hidden = status.log.length === 0;
+  $("#update-log").textContent = status.log.join("\n");
+  clearTimeout(updatePoll);
+  if (status.running) updatePoll = setTimeout(loadUpdateStatus, 3000);
+}
+
+async function loadUpdateStatus() {
+  renderUpdate(await api("/system-update"));
+}
+
+$("#start-update").addEventListener("click", async () => {
+  if (!confirm("Update the box now? Videos and games keep working, but it can take some minutes.")) return;
+  try {
+    renderUpdate(await api("/system-update", { method: "POST" }));
+  } catch (error) {
+    $("#update-status").textContent = error.message;
+  }
+});
 
 // ---- Accounts ----
 

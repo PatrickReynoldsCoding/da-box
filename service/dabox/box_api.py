@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
+from dabox.maintenance import Appearance, load_appearance
 from dabox.models import SetupRequest
 from dabox.services import Services, get_services, require_box_client
 from dabox.system import NetworkStatus, WifiConnectResult, WifiNetwork, available_timezones
@@ -31,6 +32,7 @@ class BoxStateView(BaseModel):
     setup_required: bool
     parent_mode: bool
     admin_urls: list[str]
+    appearance: Appearance
 
 
 class WifiConnectRequest(BaseModel):
@@ -50,6 +52,7 @@ def box_state(services: Services = Depends(get_services)) -> BoxStateView:
         setup_required=services.box_state.setup_required(),
         parent_mode=services.box_state.parent_mode,
         admin_urls=admin_urls(services.admin_port, ip_address),
+        appearance=load_appearance(services.store),
     )
 
 

@@ -76,7 +76,8 @@ create_users() {
   getent group "$MEDIA_GROUP" >/dev/null || groupadd --system "$MEDIA_GROUP"
   id "$SERVICE_USER" >/dev/null 2>&1 || useradd --system --home-dir "$DATA_DIR" --shell /usr/sbin/nologin "$SERVICE_USER"
   id "$KID_USER" >/dev/null 2>&1 || useradd --create-home --shell /usr/sbin/nologin "$KID_USER"
-  usermod -aG "$MEDIA_GROUP" "$SERVICE_USER"
+  # systemd-journal: the admin app shows the update log.
+  usermod -aG "$MEDIA_GROUP,systemd-journal" "$SERVICE_USER"
   # video/render: the screen; input: game controllers; audio: sound.
   usermod -aG "$MEDIA_GROUP,video,render,input,audio" "$KID_USER"
   passwd --lock "$KID_USER" >/dev/null
@@ -93,6 +94,7 @@ install_code() {
   rsync -a --delete --exclude .godot --exclude tests "$repo/ui/" "$INSTALL_DIR/ui/"
   install -d "$INSTALL_DIR/bin"
   install -m 0755 "$templates/dabox-session" "$INSTALL_DIR/bin/dabox-session"
+  install -m 0755 "$templates/dabox-update" "$INSTALL_DIR/bin/dabox-update"
 
   [[ -x "$INSTALL_DIR/venv/bin/python" ]] || python3 -m venv "$INSTALL_DIR/venv"
   "$INSTALL_DIR/venv/bin/pip" install --quiet --upgrade pip
@@ -190,6 +192,7 @@ install_system_files() {
   step "Installing system services, PAM, polkit and firewall"
   install -m 0644 "$templates/dabox-service.service" /etc/systemd/system/dabox-service.service
   install -m 0644 "$templates/dabox-kiosk.service" /etc/systemd/system/dabox-kiosk.service
+  install -m 0644 "$templates/dabox-update.service" /etc/systemd/system/dabox-update.service
   install -m 0644 "$templates/pam-dabox-kiosk" /etc/pam.d/dabox-kiosk
   install -d /etc/polkit-1/rules.d
   install -m 0644 "$templates/50-dabox.rules" /etc/polkit-1/rules.d/50-dabox.rules

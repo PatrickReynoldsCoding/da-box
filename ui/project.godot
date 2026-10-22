@@ -13,6 +13,7 @@ boot_splash/show_image=false
 [autoload]
 
 Api="*res://scripts/api.gd"
+Sounds="*res://scripts/sounds.gd"
 
 [display]
 

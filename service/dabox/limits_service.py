@@ -13,6 +13,7 @@ from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Protocol
 
+from dabox.activity import ActivityLog
 from dabox.box_state import BoxState
 from dabox.limits import (
     SHUTDOWN_DELAY,
@@ -64,7 +65,7 @@ class HttpAgentClient:
 
     def status(self) -> PlayerSnapshot | None:
         raw = self._call("/status")
-        return PlayerSnapshot(state=raw["state"], kind=raw.get("kind")) if raw else None
+        return PlayerSnapshot(state=raw["state"], kind=raw.get("kind"), title=raw.get("title")) if raw else None
 
     def stop(self) -> None:
         self._call("/control", {"action": "stop"})
@@ -95,7 +96,9 @@ class LimitsService:
         clock: Callable[[], datetime],
         agent: AgentClient,
         power: PowerBackend,
+        activity: ActivityLog,
     ) -> None:
+        self.activity = activity
         self._usage = usage
         self._box_state = box_state
         self._clock = clock
@@ -159,6 +162,7 @@ class LimitsService:
             now = self._clock()
             player = self._agent.status() or PlayerSnapshot(state="idle", kind=None)
             self._count_usage(now, player)
+            self.activity.observe(player.kind, player.title, player.active, now)
             if self._box_state.parent_mode:
                 self._shutdown_at = None
                 return

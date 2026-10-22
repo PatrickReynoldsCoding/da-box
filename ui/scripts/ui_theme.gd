@@ -3,6 +3,13 @@ class_name UiTheme
 
 const BACKGROUND_TOP := Color("1b103d")
 const BACKGROUND_BOTTOM := Color("3a1f7a")
+## Background gradients for the colour themes the parent can pick.
+const THEMES := {
+	"purple": [Color("1b103d"), Color("3a1f7a")],
+	"ocean": [Color("061a33"), Color("0b4f7a")],
+	"forest": [Color("0b2216"), Color("1f5a35")],
+	"sunset": [Color("2a0f2e"), Color("8a3b3b")],
+}
 const TEXT := Color("fff8e7")
 const TEXT_MUTED := Color("c9bdf0")
 const FOCUS := Color("ffe14d")

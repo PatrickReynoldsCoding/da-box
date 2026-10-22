@@ -17,6 +17,11 @@ CREATE TABLE IF NOT EXISTS metadata (
     item_id TEXT PRIMARY KEY,
     value   TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS activity (
+    started TEXT NOT NULL,
+    value   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS activity_started ON activity (started);
 """
 
 
@@ -89,3 +94,22 @@ class Store:
     def delete_metadata(self, item_id: str) -> None:
         with self._connect() as connection:
             connection.execute("DELETE FROM metadata WHERE item_id = ?", (item_id,))
+
+    def add_activity(self, entry: dict) -> None:
+        with self._connect() as connection:
+            connection.execute("INSERT INTO activity (started, value) VALUES (?, ?)", (entry["started"], json.dumps(entry)))
+
+    def activity_since(self, since_iso: str) -> list[dict]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT value FROM activity WHERE started >= ? ORDER BY started DESC", (since_iso,)
+            ).fetchall()
+        return [json.loads(row[0]) for row in rows]
+
+    def delete_activity_before(self, before_iso: str) -> None:
+        with self._connect() as connection:
+            connection.execute("DELETE FROM activity WHERE started < ?", (before_iso,))
+
+    @property
+    def path(self) -> Path:
+        return self._db_path

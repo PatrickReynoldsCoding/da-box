@@ -12,10 +12,9 @@ var _gradient := GradientTexture2D.new()
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var gradient := Gradient.new()
-	gradient.set_color(0, UiTheme.BACKGROUND_TOP)
-	gradient.set_color(1, UiTheme.BACKGROUND_BOTTOM)
-	_gradient.gradient = gradient
+	_gradient.gradient = Gradient.new()
+	_apply_theme(Api.state)
+	Api.state_changed.connect(_apply_theme)
 	_gradient.fill_from = Vector2(0, 0)
 	_gradient.fill_to = Vector2(0, 1)
 	var random := RandomNumberGenerator.new()
@@ -28,6 +27,13 @@ func _ready() -> void:
 			"speed": random.randf_range(0.004, 0.018),
 			"colour": BUBBLE_COLOURS[i % BUBBLE_COLOURS.size()],
 		})
+
+
+func _apply_theme(state: Dictionary) -> void:
+	var appearance: Dictionary = state.get("appearance", {})
+	var colours: Array = UiTheme.THEMES.get(appearance.get("theme", "purple"), UiTheme.THEMES["purple"])
+	_gradient.gradient.set_color(0, colours[0])
+	_gradient.gradient.set_color(1, colours[1])
 
 
 func _process(delta: float) -> void:
