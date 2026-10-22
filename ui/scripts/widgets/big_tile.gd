@@ -6,6 +6,7 @@ var _subtitle: Label
 
 
 func _init(title: String, icon_kind: Icon.Kind, colour: Color, subtitle: String = "") -> void:
+	name = title + "Tile"
 	custom_minimum_size = Vector2(380, 460)
 	focus_mode = Control.FOCUS_ALL
 	add_theme_stylebox_override("normal", UiTheme.rounded_box(colour, 48))

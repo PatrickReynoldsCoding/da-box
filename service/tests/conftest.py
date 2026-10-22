@@ -73,6 +73,10 @@ def media_dir(tmp_path: Path) -> Path:
     write_file(media / "Music" / "The Band" / "First Album" / "01 - Opening.mp3")
     write_file(media / "Music" / "The Band" / "First Album" / "02 - Second Song.mp3")
     write_file(media / "Music" / "The Band" / "First Album" / "cover.jpg", b"\xff\xd8\xff fake jpeg")
+    write_file(media / "TV" / "Bluey" / "Season 01" / "Bluey S01E02 - Hospital.mp4", b"episode two")
+    write_file(media / "TV" / "Bluey" / "Season 01" / "Bluey S01E01 - The Pool.mp4", b"episode one")
+    write_file(media / "TV" / "Bluey" / "Season 2" / "03 Bike.mp4", b"episode three")
+    write_file(media / "TV" / "Bluey" / "poster.jpg", b"\xff\xd8\xff fake jpeg")
     return media
 
 

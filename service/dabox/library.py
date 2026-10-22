@@ -6,12 +6,13 @@ from pathlib import Path
 
 import mutagen
 
-from dabox.models import Album, Film, Library, MediaSource, Track
+from dabox.models import Album, Episode, Film, Library, MediaSource, Show, Track
 from dabox.nfo import find_movie_nfo
 from dabox.usb import UsbStick
 
 FILMS_FOLDER = "Films"
 MUSIC_FOLDER = "Music"
+TV_FOLDER = "TV"
 
 VIDEO_EXTENSIONS = frozenset({".mkv", ".mp4", ".m4v", ".avi", ".mov", ".webm", ".ts"})
 AUDIO_EXTENSIONS = frozenset({".mp3", ".flac", ".ogg", ".opus", ".m4a", ".wav"})
@@ -20,6 +21,8 @@ ART_FILE_NAMES = ("poster.jpg", "poster.png", "cover.jpg", "cover.png", "folder.
 _FILM_NAME_PATTERN = re.compile(r"^(?P<title>.+?)\s*\((?P<year>\d{4})\)$")
 _TRACK_NUMBER_PATTERN = re.compile(r"^\s*(\d+)")
 _LEADING_TRACK_NUMBER_PATTERN = re.compile(r"^\d+[\s._-]+")
+_EPISODE_PATTERN = re.compile(r"[Ss](?P<season>\d{1,2})[Ee](?P<episode>\d{1,3})")
+_SEASON_FOLDER_PATTERN = re.compile(r"(?i)^season\s*(?P<season>\d+)$")
 _FINGERPRINT_CHUNK = 64 * 1024
 
 UNKNOWN_ARTIST = "Unknown artist"
@@ -202,6 +205,66 @@ def read_album_tags(path: Path) -> tuple[str | None, str | None]:
     return artist, _first_tag(tags, "album")
 
 
+def parse_episode(path: Path) -> tuple[int, int] | None:
+    """(season, episode) from a name like "Bluey S01E05.mp4", or from the season folder
+    and a leading number ("Season 2/03 The Pool.mp4")."""
+    match = _EPISODE_PATTERN.search(path.stem)
+    if match:
+        return int(match.group("season")), int(match.group("episode"))
+    season_match = _SEASON_FOLDER_PATTERN.match(path.parent.name)
+    number = parse_track_number(path.stem)
+    if season_match and number is not None:
+        return int(season_match.group("season")), number
+    return None
+
+
+def episode_title(path: Path, show_title: str) -> str:
+    """The part of the file name after SxxEyy, or the whole name."""
+    stem = path.stem
+    match = _EPISODE_PATTERN.search(stem)
+    rest = stem[match.end():] if match else _LEADING_TRACK_NUMBER_PATTERN.sub("", stem)
+    rest = rest.strip(" -._")
+    return rest or (f"{show_title} {match.group(0).upper()}" if match else stem)
+
+
+def scan_shows(media_dir: Path) -> list[Show]:
+    tv_dir = media_dir / TV_FOLDER
+    if not tv_dir.is_dir():
+        return []
+    namer = ItemNamer(media_dir, None)
+    shows: list[Show] = []
+    for show_folder in _visible_entries(tv_dir):
+        if not show_folder.is_dir():
+            continue
+        episodes: list[Episode] = []
+        for path in sorted(show_folder.rglob("*")):
+            numbers = parse_episode(path) if path.suffix.lower() in VIDEO_EXTENSIONS and not path.name.startswith(".") else None
+            if numbers is None:
+                continue
+            fingerprint = cached_fingerprint(path)
+            episodes.append(
+                Episode(
+                    id=namer.file_id("episode", path, fingerprint),
+                    title=episode_title(path, show_folder.name),
+                    season=numbers[0],
+                    number=numbers[1],
+                    path=path,
+                    fingerprint=fingerprint,
+                )
+            )
+        if episodes:
+            episodes.sort(key=lambda episode: (episode.season, episode.number))
+            shows.append(
+                Show(
+                    id=item_id("show", str(show_folder.relative_to(media_dir))),
+                    title=show_folder.name,
+                    art_path=find_art(show_folder),
+                    episodes=episodes,
+                )
+            )
+    return shows
+
+
 def _track_sort_key(track: Track) -> tuple[int, str]:
     # Tracks without a number go after the numbered ones.
     return (track.track_number if track.track_number is not None else 10_000, track.path.name.lower())
@@ -279,6 +342,7 @@ def scan_library(media_dir: Path, sticks: list[UsbStick]) -> Library:
     return Library(
         films=sorted(films, key=lambda film: film.title.lower()),
         albums=sorted(albums, key=lambda album: (album.artist.lower(), album.title.lower())),
+        shows=scan_shows(media_dir),
         sticks=sticks,
     )
 
@@ -289,7 +353,7 @@ class LibraryIndex:
     def __init__(self, media_dir: Path) -> None:
         self._media_dir = media_dir
         self._lock = threading.Lock()
-        self._library = Library(films=[], albums=[], sticks=[])
+        self._library = Library(films=[], albums=[], shows=[], sticks=[])
 
     @property
     def media_dir(self) -> Path:
@@ -311,3 +375,6 @@ class LibraryIndex:
             if item.id == item_id:
                 return item
         return None
+
+    def find_show(self, show_id: str) -> Show | None:
+        return next((show for show in self._library.shows if show.id == show_id), None)

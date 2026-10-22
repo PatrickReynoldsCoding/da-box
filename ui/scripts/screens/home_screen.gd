@@ -26,7 +26,8 @@ func _ready() -> void:
 	tiles.alignment = BoxContainer.ALIGNMENT_CENTER
 	tiles.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	tiles.add_theme_constant_override("separation", 48)
-	var tv_tile := _coming_soon(BigTile.new("TV", Icon.Kind.TV, UiTheme.TV, "Coming soon"))
+	var tv_tile := BigTile.new("TV", Icon.Kind.TV, UiTheme.TV)
+	tv_tile.pressed.connect(func() -> void: open_screen.emit(GuideScreen.new()))
 	_films_tile = BigTile.new("Films", Icon.Kind.FILM, UiTheme.FILMS)
 	_music_tile = BigTile.new("Music", Icon.Kind.MUSIC, UiTheme.MUSIC)
 	var games_tile := _coming_soon(BigTile.new("Games", Icon.Kind.GAME, UiTheme.GAMES, "Coming soon"))

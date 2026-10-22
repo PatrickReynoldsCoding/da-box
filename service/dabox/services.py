@@ -7,6 +7,8 @@ from fastapi import HTTPException, Request
 
 from dabox.auth import AdminAuth
 from dabox.box_state import BoxState
+from dabox.channels import Guide
+from dabox.durations import Durations
 from dabox.library import LibraryIndex
 from dabox.metadata import MetadataService
 from dabox.models import Album, Film
@@ -27,14 +29,18 @@ class Services:
     network: NetworkBackend
     usb: UsbBackend
     metadata: MetadataService
+    durations: Durations
+    guide: Guide
     incoming_dir: Path
     admin_port: int
-    # Set to wake the metadata worker after the library changes.
+    # Set to wake the metadata and guide workers after the library changes.
     metadata_wanted: threading.Event = field(default_factory=threading.Event)
+    guide_wanted: threading.Event = field(default_factory=threading.Event)
 
     def rescan_library(self, sticks: list[UsbStick] | None = None) -> None:
         self.library.rescan(sticks)
         self.metadata_wanted.set()
+        self.guide_wanted.set()
 
     def item_or_404(self, item_id: str) -> Film | Album:
         item = self.library.find(item_id)

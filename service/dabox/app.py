@@ -4,10 +4,12 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from dabox import admin_api, box_api
+from dabox import admin_api, box_api, guide_api
 from dabox.auth import AdminAuth
 from dabox.background import BackgroundWorkers
 from dabox.box_state import BoxState
+from dabox.channels import Guide
+from dabox.durations import Durations
 from dabox.config import ServiceConfig
 from dabox.library import LibraryIndex
 from dabox.metadata import HttpClient, MetadataService, MetadataStore, UrllibClient
@@ -35,14 +37,19 @@ def build_services(
 ) -> Services:
     store = Store(config.data_dir / "dabox.db")
     auth = AdminAuth(store)
+    box_state = BoxState(store, auth, timezone_backend)
+    library = LibraryIndex(config.media_dir)
+    durations = Durations(store)
     return Services(
         store=store,
         auth=auth,
-        box_state=BoxState(store, auth, timezone_backend),
-        library=LibraryIndex(config.media_dir),
+        box_state=box_state,
+        library=library,
         network=network,
         usb=usb,
         metadata=MetadataService(MetadataStore(store, config.data_dir / "art"), http_client),
+        durations=durations,
+        guide=Guide(store, library, durations, lambda: box_state.timezone),
         incoming_dir=config.data_dir / "incoming",
         admin_port=config.port,
     )
@@ -74,5 +81,7 @@ def create_app(services: Services, run_workers: bool = True) -> FastAPI:
     app.include_router(box_api.router)
     app.include_router(admin_api.public_router)
     app.include_router(admin_api.router)
+    app.include_router(guide_api.box_router)
+    app.include_router(guide_api.admin_router)
     app.mount("/", StaticFiles(directory=ADMIN_WEB_DIR, html=True), name="admin-web")
     return app

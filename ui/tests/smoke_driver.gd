@@ -104,6 +104,27 @@ func _run_main_screens() -> void:
 	await _focus_and_press_button_with_icon_action("stop")
 	await _wait(1.5)
 	await _shot("after-stop")
+	await _run_tv()
+
+
+func _run_tv() -> void:
+	# Back to Home, then the TV tile (left of Films).
+	for i in 3:
+		await _press("ui_cancel")
+	await _wait(0.5)
+	get_tree().root.find_child("TVTile", true, false).grab_focus()
+	await _press("ui_accept")
+	await _wait(2.5)
+	await _shot("tv-guide")
+	await _press("ui_accept")
+	await _wait(4.0)
+	await _shot("tv-channel")
+	await _press("ui_down")
+	await _wait(4.0)
+	await _shot("tv-channel-changed")
+	await _press("ui_cancel")
+	await _wait(1.5)
+	await _shot("tv-back-to-guide")
 
 
 # ---- Helpers ----

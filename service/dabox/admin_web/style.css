@@ -88,8 +88,8 @@ input:not([type="checkbox"]) {
 label { display: block; margin-bottom: 12px; }
 label.check { display: flex; gap: 8px; align-items: center; }
 
-.tabs { display: flex; gap: 4px; margin-bottom: 16px; overflow-x: auto; }
-.tabs button { background: transparent; color: var(--text); flex: 1; white-space: nowrap; }
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 16px; }
+.tabs button { background: transparent; color: var(--text); flex: 1 1 auto; white-space: nowrap; }
 .tabs button.active { background: var(--accent); color: var(--accent-text); }
 
 .row { display: flex; gap: 8px; align-items: center; }
@@ -220,3 +220,30 @@ dialog h3 { margin: 20px 0 8px; }
 .art-grid img:hover { border-color: var(--accent); }
 
 body.is-film .album-only, body.is-album .film-only { display: none; }
+
+select {
+  font: inherit;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+}
+.checklist li { padding: 6px 0; }
+.checklist label { display: flex; gap: 8px; align-items: center; margin: 0; }
+.guide-channel h3 { margin: 16px 0 6px; }
+.guide-slot {
+  display: grid;
+  grid-template-columns: 96px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+  font-size: 15px;
+}
+.guide-slot .time { color: var(--muted); font-variant-numeric: tabular-nums; }
+.guide-slot .actions { display: flex; gap: 6px; }
+.guide-slot .actions button { padding: 4px 10px; font-size: 13px; }
+.guide-slot.empty .title { color: var(--muted); font-style: italic; }
+.badge.edited { background: var(--accent); color: var(--accent-text); }

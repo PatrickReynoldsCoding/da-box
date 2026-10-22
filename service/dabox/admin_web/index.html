@@ -36,6 +36,8 @@
       <nav class="tabs">
         <button data-tab="home" class="active">Home</button>
         <button data-tab="content">Content</button>
+        <button data-tab="channels">Channels</button>
+        <button data-tab="guide">Guide</button>
         <button data-tab="upload">Upload</button>
         <button data-tab="settings">Settings</button>
       </nav>
@@ -70,6 +72,29 @@
         <div class="card">
           <h2>Music</h2>
           <ul id="album-list" class="items"></ul>
+        </div>
+      </div>
+
+      <div id="tab-channels" class="tab" hidden>
+        <div class="card">
+          <div class="row spread">
+            <h2>Channels</h2>
+            <button id="new-channel">New channel</button>
+          </div>
+          <p class="muted small">Each channel plays its pool of films, shows or albums in its opening hours. USB items cannot be used in channels.</p>
+          <ul id="channel-list" class="items"></ul>
+        </div>
+      </div>
+
+      <div id="tab-guide" class="tab" hidden>
+        <div class="card">
+          <div class="row spread">
+            <h2>Guide</h2>
+            <button id="generate-guide" class="secondary">Generate again</button>
+          </div>
+          <label>Day <input id="guide-day" type="date"></label>
+          <p class="muted small">"Generate again" refills the week. Programmes you changed or emptied stay.</p>
+          <div id="guide-days"></div>
         </div>
       </div>
 
@@ -190,6 +215,48 @@
       <button type="button" id="copy-to-box">Copy to the box</button>
     </div>
     <p id="item-message" class="message"></p>
+  </dialog>
+
+  <dialog id="channel-dialog">
+    <form method="dialog" class="dialog-close"><button class="link" aria-label="Close">Close</button></form>
+    <form id="channel-form">
+      <h2 id="channel-form-title">New channel</h2>
+      <label>Name <input name="name" maxlength="40" required></label>
+      <label>Type
+        <select name="kind">
+          <option value="video">Video (films and shows)</option>
+          <option value="music">Music (albums)</option>
+        </select>
+      </label>
+      <label>Order
+        <select name="order">
+          <option value="in_order">In order (episodes follow each other)</option>
+          <option value="shuffle">Shuffle</option>
+        </select>
+      </label>
+      <h3>What plays</h3>
+      <ul id="pool-list" class="plain checklist"></ul>
+      <h3>Opening hours</h3>
+      <button type="button" id="copy-monday-hours" class="secondary">Copy Monday to every day</button>
+      <table class="days">
+        <thead><tr><th>Day</th><th>Open</th><th>From</th><th>To</th></tr></thead>
+        <tbody id="hours-rows"></tbody>
+      </table>
+      <div class="row">
+        <button type="submit">Save channel</button>
+        <button type="button" id="delete-channel" class="danger">Delete</button>
+      </div>
+      <p class="message"></p>
+    </form>
+  </dialog>
+
+  <dialog id="slot-dialog">
+    <form method="dialog" class="dialog-close"><button class="link" aria-label="Close">Close</button></form>
+    <h2>Change this programme</h2>
+    <p id="slot-when" class="muted"></p>
+    <label>Search <input id="programme-filter" placeholder="Type to filter"></label>
+    <ul id="programme-list" class="candidates"></ul>
+    <p id="slot-message" class="message"></p>
   </dialog>
 
   <script src="app.js"></script>

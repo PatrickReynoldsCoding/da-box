@@ -10,6 +10,7 @@ ffmpeg_quiet() { ffmpeg -hide_banner -loglevel error -y "$@"; }
 
 make_film() {
   local folder="$target/Films/$1" source="$2" tone="$3"
+  [[ -f "$folder/$1.mp4" ]] && return
   mkdir -p "$folder"
   ffmpeg_quiet -f lavfi -i "$source" -f lavfi -i "sine=frequency=$tone:sample_rate=48000" \
     -t "$seconds" -pix_fmt yuv420p -c:v libx264 -preset veryfast -c:a aac -shortest "$folder/$1.mp4"
@@ -21,6 +22,7 @@ make_album() {
   local artist="$1" album="$2" cover_source="$3"
   shift 3
   local folder="$target/Music/$artist/$album" number=1
+  [[ -f "$folder/cover.jpg" ]] && return
   mkdir -p "$folder"
   ffmpeg_quiet -f lavfi -i "$cover_source" -frames:v 1 -vf "scale=500:500" "$folder/cover.jpg"
   for frequency in "$@"; do
@@ -31,6 +33,18 @@ make_album() {
   done
 }
 
+make_episode() {
+  local show="$1" season="$2" episode="$3" title="$4" source="$5" seconds="$6"
+  local folder="$target/TV/$show/Season $(printf '%02d' "$season")"
+  local file="$folder/$show S$(printf '%02d' "$season")E$(printf '%02d' "$episode") - $title.mp4"
+  [[ -f "$file" ]] && return
+  mkdir -p "$folder"
+  ffmpeg_quiet -f lavfi -i "$source" -f lavfi -i "sine=frequency=$((200 + episode * 50)):sample_rate=48000" \
+    -t "$seconds" -pix_fmt yuv420p -c:v libx264 -preset veryfast -crf 32 -c:a aac -shortest "$file"
+  [[ -f "$target/TV/$show/poster.jpg" ]] || \
+    ffmpeg_quiet -ss 1 -i "$file" -frames:v 1 -vf "crop=ih*2/3:ih,scale=400:600" "$target/TV/$show/poster.jpg"
+}
+
 echo "Making test media in $target"
 make_film "Rainbow Bars (2024)" "smptehdbars=size=1280x720:rate=30" 440
 make_film "Test Card (2025)" "testsrc2=size=1280x720:rate=30" 330
@@ -38,4 +52,8 @@ make_film "Game of Life" "life=size=1280x720:mold=10:rate=30:ratio=0.1:death_col
 make_film "Fractal Trip (2023)" "mandelbrot=size=1280x720:rate=30" 523
 make_album "Sine Wave Band" "Greatest Tones" "gradients=size=500x500:seed=3" 262 330 392
 make_album "The Oscillators" "Low and High" "gradients=size=500x500:seed=11" 196 523 880
+make_episode "Shape Friends" 1 1 "Circles" "testsrc2=size=960x540:rate=25" 180
+make_episode "Shape Friends" 1 2 "Squares" "smptebars=size=960x540:rate=25" 240
+make_episode "Shape Friends" 1 3 "Triangles" "rgbtestsrc=size=960x540:rate=25" 150
+make_episode "Shape Friends" 2 1 "Spirals" "mandelbrot=size=960x540:rate=25" 200
 echo "Done."

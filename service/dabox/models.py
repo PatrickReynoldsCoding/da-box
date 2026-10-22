@@ -103,7 +103,26 @@ class Album(BaseModel):
     stick_label: str | None
 
 
+class Episode(BaseModel):
+    id: str
+    title: str
+    season: int
+    number: int
+    path: Path
+    fingerprint: str
+
+
+class Show(BaseModel):
+    """A TV show on the box. Shows are used in channels only."""
+
+    id: str
+    title: str
+    art_path: Path | None
+    episodes: list[Episode]
+
+
 class Library(BaseModel):
     films: list[Film]
     albums: list[Album]
+    shows: list[Show]
     sticks: list[UsbStick]

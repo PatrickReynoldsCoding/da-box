@@ -1,7 +1,8 @@
-"""Background threads: watch for USB sticks, and fetch metadata for new items."""
+"""Background threads: watch for USB sticks, fetch metadata for new items, and keep the TV guide filled."""
 
 import logging
 import threading
+from datetime import timedelta
 
 from dabox.metadata import MetadataError
 from dabox.services import Services
@@ -10,6 +11,7 @@ log = logging.getLogger(__name__)
 
 USB_POLL_SECONDS = 3.0
 METADATA_IDLE_SECONDS = 60.0
+GUIDE_IDLE_SECONDS = 300.0
 
 
 class BackgroundWorkers:
@@ -20,7 +22,7 @@ class BackgroundWorkers:
         self._stick_ids: list[str] | None = None
 
     def start(self) -> None:
-        for target in (self._watch_usb, self._fetch_metadata):
+        for target in (self._watch_usb, self._fetch_metadata, self._keep_guide):
             thread = threading.Thread(target=target, daemon=True, name=target.__name__)
             thread.start()
             self._threads.append(thread)
@@ -28,6 +30,7 @@ class BackgroundWorkers:
     def stop(self) -> None:
         self._stop.set()
         self._services.metadata_wanted.set()
+        self._services.guide_wanted.set()
         for thread in self._threads:
             thread.join(timeout=5)
 
@@ -54,6 +57,39 @@ class BackgroundWorkers:
                 log.warning("Metadata for %s: %s", item.title, error)
             fetched += 1
         return fetched
+
+    def update_guide_once(self) -> None:
+        """Measures new box files, then makes sure this week (and on Sundays, next
+        week) has a guide."""
+        services = self._services
+        library = services.library.library
+        files = {}
+        for film in library.films:
+            if film.source == "box":
+                files[film.fingerprint] = film.path
+        for show in library.shows:
+            for episode in show.episodes:
+                files[episode.fingerprint] = episode.path
+        for album in library.albums:
+            if album.source == "box":
+                for track in album.tracks:
+                    files[track.fingerprint] = track.path
+        services.durations.measure_missing(files)
+
+        guide = services.guide
+        now = guide.now()
+        guide.ensure_week(now)
+        if now.weekday() == 6:
+            guide.ensure_week(now + timedelta(days=1))
+
+    def _keep_guide(self) -> None:
+        while not self._stop.is_set():
+            try:
+                self.update_guide_once()
+            except Exception:
+                log.exception("Guide update failed")
+            self._services.guide_wanted.wait(GUIDE_IDLE_SECONDS)
+            self._services.guide_wanted.clear()
 
     def _watch_usb(self) -> None:
         while not self._stop.is_set():

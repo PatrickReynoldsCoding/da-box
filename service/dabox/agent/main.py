@@ -16,6 +16,7 @@ from dabox.agent.mpv import (
     MediaKind,
     MpvPlayer,
     PathNotAllowed,
+    PlayMode,
     PlayerStatus,
     PlayItem,
     extra_arguments_from_env,
@@ -26,6 +27,9 @@ class PlayRequest(BaseModel):
     kind: MediaKind
     items: list[PlayItem] = Field(min_length=1)
     start_index: int = Field(default=0, ge=0)
+    mode: PlayMode = PlayMode.FILM
+    # Live channels start part-way through.
+    start_seconds: float = Field(default=0.0, ge=0)
 
 
 class ControlRequest(BaseModel):
@@ -40,7 +44,7 @@ def create_agent_app(player: MpvPlayer) -> FastAPI:
         if request.start_index >= len(request.items):
             raise HTTPException(status_code=422, detail="start_index is past the end of the list")
         try:
-            player.play(request.kind, request.items, request.start_index)
+            player.play(request.kind, request.items, request.start_index, request.mode, request.start_seconds)
         except PathNotAllowed as rejection:
             raise HTTPException(status_code=403, detail=str(rejection)) from rejection
         return player.status()

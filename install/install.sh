@@ -62,7 +62,7 @@ install_packages() {
     avahi-daemon libnss-mdns nftables network-manager polkitd systemd-timesyncd \
     libgl1-mesa-dri libegl1 libgles2 libgl1 libwayland-client0 libwayland-cursor0 \
     libwayland-egl1 libxkbcommon0 libdecor-0-0 fontconfig fonts-dejavu-core \
-    alsa-utils ca-certificates curl unzip rsync udisks2 tinyproxy
+    alsa-utils ca-certificates curl unzip rsync udisks2 tinyproxy ffmpeg
 }
 
 create_users() {

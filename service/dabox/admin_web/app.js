@@ -42,7 +42,7 @@ function showTab(name) {
     button.classList.toggle("active", button.dataset.tab === name);
   }
   for (const tab of document.querySelectorAll(".tab")) tab.hidden = tab.id !== `tab-${name}`;
-  const loaders = { home: loadHome, content: loadContent, settings: loadSettings };
+  const loaders = { home: loadHome, content: loadContent, settings: loadSettings, channels: loadChannels, guide: loadGuide };
   loaders[name]?.();
 }
 
@@ -501,6 +501,268 @@ $("#copy-to-box").addEventListener("click", async () => {
     $("#copy-to-box").disabled = false;
   }
 });
+
+// ---- Channels ----
+
+const POOL_KINDS = { video: ["film", "show"], music: ["album"] };
+const KIND_LABELS = { film: "Film", show: "Show", album: "Album" };
+let poolItems = [];
+let editingChannel = null;
+
+async function loadChannels() {
+  const channels = await api("/channels");
+  const rows = channels.map((channel) => {
+    const row = document.createElement("li");
+    const info = document.createElement("div");
+    info.className = "info";
+    const title = document.createElement("div");
+    title.textContent = `${channel.number}. ${channel.name}`;
+    const sub = document.createElement("div");
+    sub.className = "sub";
+    const openDays = Object.values(channel.hours).filter(Boolean).length;
+    sub.textContent = `${channel.kind === "music" ? "Music" : "Video"} · ${channel.order === "shuffle" ? "shuffle" : "in order"} · ${channel.pool.length} in pool · open ${openDays} days`;
+    info.append(title, sub);
+    row.append(info);
+    row.addEventListener("click", () => openChannel(channel));
+    return row;
+  });
+  $("#channel-list").replaceChildren(...rows);
+  $("#channel-list").classList.toggle("empty", rows.length === 0);
+}
+
+function renderPool(kind, selected) {
+  const allowed = POOL_KINDS[kind];
+  const rows = poolItems.filter((item) => allowed.includes(item.kind)).map((item) => {
+    const row = document.createElement("li");
+    const label = document.createElement("label");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.value = `${item.kind}:${item.id}`;
+    box.checked = selected.has(box.value);
+    label.append(box, ` ${KIND_LABELS[item.kind]}: ${item.title}`);
+    const detail = document.createElement("span");
+    detail.className = "muted small";
+    detail.textContent = item.detail ? ` (${item.detail})` : "";
+    label.append(detail);
+    row.append(label);
+    return row;
+  });
+  $("#pool-list").replaceChildren(...rows);
+}
+
+function renderHours(hours) {
+  const rows = DAYS.map(([key, label]) => {
+    const openHours = hours[key];
+    const row = document.createElement("tr");
+    row.dataset.day = key;
+    row.innerHTML = `<td>${label}</td><td><input type="checkbox" class="open"></td>
+      <td><input type="time" class="from"></td><td><input type="time" class="to"></td>`;
+    const open = $(".open", row);
+    const from = $(".from", row);
+    const to = $(".to", row);
+    open.checked = Boolean(openHours);
+    from.value = toInputTime(openHours?.start);
+    to.value = toInputTime(openHours?.end);
+    const sync = () => { from.disabled = to.disabled = !open.checked; from.required = to.required = open.checked; };
+    open.addEventListener("change", sync);
+    sync();
+    return row;
+  });
+  $("#hours-rows").replaceChildren(...rows);
+}
+
+async function openChannel(channel) {
+  editingChannel = channel;
+  poolItems = await api("/pool");
+  const form = $("#channel-form");
+  form.reset();
+  $("#channel-form-title").textContent = channel ? `Edit ${channel.name}` : "New channel";
+  form.name.value = channel?.name ?? "";
+  form.kind.value = channel?.kind ?? "video";
+  form.order.value = channel?.order ?? "in_order";
+  const selected = new Set((channel?.pool ?? []).map((entry) => `${entry.kind}:${entry.id}`));
+  renderPool(form.kind.value, selected);
+  const emptyHours = Object.fromEntries(DAYS.map(([key]) => [key, null]));
+  renderHours(channel?.hours ?? emptyHours);
+  $("#delete-channel").hidden = !channel;
+  setMessage($(".message", form), "");
+  $("#channel-dialog").showModal();
+}
+
+$("#new-channel").addEventListener("click", () => openChannel(null));
+$("#channel-form").kind.addEventListener("change", (event) => renderPool(event.target.value, new Set()));
+
+$("#copy-monday-hours").addEventListener("click", () => {
+  const rows = [...document.querySelectorAll("#hours-rows tr")];
+  const monday = rows[0];
+  for (const row of rows.slice(1)) {
+    $(".open", row).checked = $(".open", monday).checked;
+    $(".from", row).value = $(".from", monday).value;
+    $(".to", row).value = $(".to", monday).value;
+    $(".open", row).dispatchEvent(new Event("change"));
+  }
+});
+
+$("#channel-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.target;
+  const hours = {};
+  for (const row of document.querySelectorAll("#hours-rows tr")) {
+    hours[row.dataset.day] = $(".open", row).checked ? { start: $(".from", row).value, end: $(".to", row).value } : null;
+  }
+  const pool = [...document.querySelectorAll("#pool-list input:checked")].map((box) => {
+    const [kind, id] = box.value.split(":");
+    return { kind, id };
+  });
+  const body = { name: form.name.value, kind: form.kind.value, order: form.order.value, pool, hours };
+  try {
+    if (editingChannel) await api(`/channels/${editingChannel.id}`, { method: "PUT", body });
+    else await api("/channels", { method: "POST", body });
+    $("#channel-dialog").close();
+    loadChannels();
+  } catch (error) {
+    setMessage($(".message", form), describeValidationError(error), "error");
+  }
+});
+
+$("#delete-channel").addEventListener("click", async () => {
+  if (!editingChannel || !confirm(`Delete the channel "${editingChannel.name}"?`)) return;
+  await api(`/channels/${editingChannel.id}`, { method: "DELETE" });
+  $("#channel-dialog").close();
+  loadChannels();
+});
+
+// ---- Guide ----
+
+let guideDay = null;
+let editingSlot = null;
+let programmeChoices = [];
+
+const timeOf = (iso) => iso.slice(11, 16);
+
+function slotRow(slot, channel) {
+  const row = document.createElement("div");
+  row.className = `guide-slot${slot.title ? "" : " empty"}`;
+  const time = document.createElement("span");
+  time.className = "time";
+  time.textContent = `${timeOf(slot.start)}–${timeOf(slot.end)}`;
+  const title = document.createElement("span");
+  title.className = "title";
+  title.textContent = slot.title ? `${slot.title}${slot.subtitle ? ` · ${slot.subtitle}` : ""}` : "Empty (you emptied this)";
+  if (slot.edited) {
+    const badge = document.createElement("span");
+    badge.className = "badge edited";
+    badge.textContent = "changed";
+    title.append(badge);
+  }
+  const actions = document.createElement("span");
+  actions.className = "actions";
+  const change = document.createElement("button");
+  change.textContent = "Change";
+  change.addEventListener("click", () => openSlot(slot, channel));
+  actions.append(change);
+  if (slot.title) {
+    const empty = document.createElement("button");
+    empty.className = "secondary";
+    empty.textContent = "Empty";
+    empty.addEventListener("click", async () => {
+      await api(`/guide/slots/${slot.id}/clear`, { method: "POST", body: { start: slot.start } });
+      loadGuide();
+    });
+    actions.append(empty);
+  }
+  if (slot.edited) {
+    const restore = document.createElement("button");
+    restore.className = "secondary";
+    restore.textContent = "Undo";
+    restore.addEventListener("click", async () => {
+      await api(`/guide/slots/${slot.id}/restore`, { method: "POST", body: { start: slot.start } });
+      loadGuide();
+    });
+    actions.append(restore);
+  }
+  row.append(time, title, actions);
+  return row;
+}
+
+async function loadGuide() {
+  const input = $("#guide-day");
+  if (!input.value) input.value = new Date().toLocaleDateString("en-CA");
+  guideDay = input.value;
+  const guide = await api(`/guide?day=${guideDay}`);
+  const sections = guide.channels.map((channel) => {
+    const section = document.createElement("div");
+    section.className = "guide-channel";
+    const heading = document.createElement("h3");
+    heading.textContent = `${channel.number}. ${channel.name}`;
+    section.append(heading);
+    if (channel.slots.length === 0) {
+      const none = document.createElement("p");
+      none.className = "muted small";
+      none.textContent = "Nothing on this day.";
+      section.append(none);
+    }
+    for (const slot of channel.slots) section.append(slotRow(slot, channel));
+    return section;
+  });
+  if (sections.length === 0) {
+    const none = document.createElement("p");
+    none.className = "muted";
+    none.textContent = "No channels yet. Make one in the Channels tab.";
+    sections.push(none);
+  }
+  $("#guide-days").replaceChildren(...sections);
+}
+
+$("#guide-day").addEventListener("change", loadGuide);
+$("#generate-guide").addEventListener("click", async () => {
+  await api(`/guide/generate?day=${guideDay}`, { method: "POST" });
+  loadGuide();
+});
+
+function renderProgrammeChoices() {
+  const filter = $("#programme-filter").value.toLowerCase();
+  const rows = programmeChoices
+    .filter((choice) => `${choice.title} ${choice.subtitle ?? ""}`.toLowerCase().includes(filter))
+    .slice(0, 100)
+    .map((choice) => {
+      const row = document.createElement("li");
+      const info = document.createElement("div");
+      const title = document.createElement("div");
+      title.textContent = choice.title;
+      const sub = document.createElement("div");
+      sub.className = "sub";
+      sub.textContent = `${choice.subtitle ?? ""}${choice.subtitle ? " · " : ""}${choice.minutes} min`;
+      info.append(title, sub);
+      row.append(info);
+      row.addEventListener("click", async () => {
+        try {
+          await api("/guide/slots", {
+            method: "POST",
+            body: { channel_id: editingSlot.channel.id, start: editingSlot.slot.start, ref: choice.ref, replace_slot_id: editingSlot.slot.id },
+          });
+          $("#slot-dialog").close();
+          loadGuide();
+        } catch (error) {
+          setMessage($("#slot-message"), describeValidationError(error), "error");
+        }
+      });
+      return row;
+    });
+  $("#programme-list").replaceChildren(...rows);
+}
+
+async function openSlot(slot, channel) {
+  editingSlot = { slot, channel };
+  $("#slot-when").textContent = `${channel.name}, ${guideDay} at ${timeOf(slot.start)}. The new programme starts at this time.`;
+  $("#programme-filter").value = "";
+  setMessage($("#slot-message"), "");
+  programmeChoices = await api(`/programmes?kind=${channel.kind}`);
+  renderProgrammeChoices();
+  $("#slot-dialog").showModal();
+}
+
+$("#programme-filter").addEventListener("input", renderProgrammeChoices);
 
 // ---- Accounts ----
 

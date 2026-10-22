@@ -94,6 +94,11 @@ def art(item_id: str, services: Services = Depends(get_services)) -> FileRespons
 
 def art_response(services: Services, item_id: str) -> FileResponse:
     """Art the parent picked or the box fetched comes first, then art next to the media."""
+    show = services.library.find_show(item_id)
+    if show is not None:
+        if show.art_path is None:
+            raise HTTPException(status_code=404, detail="No art for this show")
+        return FileResponse(show.art_path)
     item = services.item_or_404(item_id)
     metadata = services.metadata.store.get(item_id)
     if metadata is not None and metadata.art_file is not None:
