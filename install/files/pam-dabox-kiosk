@@ -1,0 +1,6 @@
+# PAM session for the da-box kiosk, so logind gives the kid user a seat (screen, input, sound).
+auth     required pam_permit.so
+account  required pam_unix.so
+session  required pam_loginuid.so
+session  required pam_unix.so
+session  required pam_systemd.so

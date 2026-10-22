@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>da-box admin</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">📺 da-box</span>
+    <button id="logout" class="link" hidden>Log out</button>
+  </header>
+
+  <main id="app">
+    <section id="view-loading" class="view"><p class="muted">Loading…</p></section>
+
+    <section id="view-setup" class="view" hidden>
+      <div class="card center">
+        <h1>Finish the setup on the TV</h1>
+        <p>The box is waiting for the first-run setup. Use the controller or keyboard on the TV. Then reload this page.</p>
+        <button onclick="location.reload()">Reload</button>
+      </div>
+    </section>
+
+    <section id="view-login" class="view" hidden>
+      <form id="login-form" class="card center">
+        <h1>Enter the PIN</h1>
+        <input id="login-pin" type="password" inputmode="numeric" autocomplete="current-password" pattern="[0-9]*" maxlength="8" required>
+        <button type="submit">Unlock</button>
+        <p id="login-message" class="message"></p>
+      </form>
+    </section>
+
+    <section id="view-main" class="view" hidden>
+      <nav class="tabs">
+        <button data-tab="home" class="active">Home</button>
+        <button data-tab="content">Content</button>
+        <button data-tab="upload">Upload</button>
+        <button data-tab="settings">Settings</button>
+      </nav>
+
+      <div id="tab-home" class="tab">
+        <div class="card">
+          <h2>Parent mode</h2>
+          <p class="muted">Unlocks all content and removes all limits on the box. It turns off when the box shuts down, or with "Leave parent mode" on the TV.</p>
+          <label class="switch big">
+            <input id="parent-mode" type="checkbox">
+            <span class="slider"></span>
+            <span id="parent-mode-label">Off</span>
+          </label>
+        </div>
+        <div class="card">
+          <h2>Library</h2>
+          <p id="library-summary" class="muted"></p>
+        </div>
+      </div>
+
+      <div id="tab-content" class="tab" hidden>
+        <div class="card">
+          <div class="row spread">
+            <h2>Films</h2>
+            <button id="rescan" class="secondary">Rescan files</button>
+          </div>
+          <ul id="film-list" class="items"></ul>
+        </div>
+        <div class="card">
+          <h2>Music</h2>
+          <ul id="album-list" class="items"></ul>
+        </div>
+      </div>
+
+      <div id="tab-upload" class="tab" hidden>
+        <form id="film-upload" class="card">
+          <h2>Add a film</h2>
+          <label>Title <input name="title" required></label>
+          <label>Year <input name="year" type="number" min="1900" max="2100"></label>
+          <label>Video file <input name="video" type="file" accept="video/*,.mkv" required></label>
+          <label>Poster (optional) <input name="poster" type="file" accept="image/jpeg,image/png"></label>
+          <button type="submit">Upload film</button>
+          <progress hidden max="100" value="0"></progress>
+          <p class="message"></p>
+        </form>
+        <form id="music-upload" class="card">
+          <h2>Add music</h2>
+          <p class="muted">Leave artist and album empty to use the tags in the files.</p>
+          <label>Artist <input name="artist"></label>
+          <label>Album <input name="album"></label>
+          <label>Audio files <input name="files" type="file" accept="audio/*" multiple required></label>
+          <button type="submit">Upload music</button>
+          <progress hidden max="100" value="0"></progress>
+          <p class="message"></p>
+        </form>
+      </div>
+
+      <div id="tab-settings" class="tab" hidden>
+        <form id="settings-form" class="card">
+          <h2>Limits</h2>
+          <label>Daily quota (minutes) <input name="daily_quota_minutes" type="number" min="15" max="720" step="5" required></label>
+          <label class="check"><input name="shared_quota" type="checkbox"> Shared quota for video and games</label>
+          <label>Overrun allowance (minutes) <input name="overrun_minutes" type="number" min="0" max="120" step="5" required></label>
+          <label class="check"><input name="bedtime_overrun" type="checkbox"> Overrun allowance also at bedtime</label>
+          <label class="check"><input name="usb_playback" type="checkbox"> Play media from USB sticks</label>
+          <label class="check"><input name="usb_games" type="checkbox"> Play games from USB sticks</label>
+
+          <h3>Game window and bedtime</h3>
+          <table class="days">
+            <thead><tr><th>Day</th><th>Games</th><th>From</th><th>To</th><th>Bedtime</th></tr></thead>
+            <tbody id="day-rows"></tbody>
+          </table>
+          <button type="submit">Save limits</button>
+          <p class="message"></p>
+        </form>
+
+        <form id="pin-form" class="card">
+          <h2>Change PIN</h2>
+          <label>Current PIN <input name="current_pin" type="password" inputmode="numeric" required></label>
+          <label>New PIN (4–8 digits) <input name="new_pin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" required></label>
+          <button type="submit">Change PIN</button>
+          <p class="message"></p>
+        </form>
+
+        <div class="card">
+          <h2>Setup</h2>
+          <p class="muted">Run the first-run setup on the TV again. The box shows the setup screens until it is complete.</p>
+          <button id="rerun-setup" class="danger">Run setup again</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

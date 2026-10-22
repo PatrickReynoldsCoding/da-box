@@ -1,0 +1,25 @@
+[Unit]
+Description=da-box service (box API, admin app)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=tvbox
+Group=tvbox
+SupplementaryGroups=dabox-media
+EnvironmentFile=/etc/dabox/service.env
+ExecStart=/opt/dabox/venv/bin/dabox-service
+# Port 80 without running as root.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+UMask=0002
+Restart=always
+RestartSec=2
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/dabox /srv/dabox
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

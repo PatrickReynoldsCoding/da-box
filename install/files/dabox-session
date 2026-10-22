@@ -1,0 +1,6 @@
+#!/bin/sh
+# Runs inside cage as the kid user: the player agent, then the box UI.
+# When the UI exits, cage exits and systemd starts the kiosk again.
+/opt/dabox/venv/bin/dabox-agent &
+exec /opt/dabox/godot/godot --path /opt/dabox/ui --fullscreen --display-driver wayland --audio-driver ALSA \
+  -- --service=http://127.0.0.1:80 --agent=http://127.0.0.1:8091 --hide-cursor

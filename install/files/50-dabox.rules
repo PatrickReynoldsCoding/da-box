@@ -1,0 +1,15 @@
+// The da-box service (user tvbox) may set up Wi-Fi, set the time zone and power off the box.
+polkit.addRule(function (action, subject) {
+  if (subject.user !== "tvbox") {
+    return polkit.Result.NOT_HANDLED;
+  }
+  var allowed = action.id.indexOf("org.freedesktop.NetworkManager.") === 0 ||
+    action.id === "org.freedesktop.timedate1.set-timezone" ||
+    action.id === "org.freedesktop.login1.power-off" ||
+    action.id === "org.freedesktop.login1.power-off-multiple-sessions" ||
+    action.id === "org.freedesktop.login1.reboot" ||
+    action.id === "org.freedesktop.login1.reboot-multiple-sessions" ||
+    action.id === "org.freedesktop.udisks2.filesystem-mount" ||
+    action.id === "org.freedesktop.udisks2.filesystem-mount-other-seat";
+  return allowed ? polkit.Result.YES : polkit.Result.NOT_HANDLED;
+});
