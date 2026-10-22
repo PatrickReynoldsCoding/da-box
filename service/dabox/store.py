@@ -13,6 +13,10 @@ CREATE TABLE IF NOT EXISTS settings (
 CREATE TABLE IF NOT EXISTS hidden_items (
     item_id TEXT PRIMARY KEY
 );
+CREATE TABLE IF NOT EXISTS metadata (
+    item_id TEXT PRIMARY KEY,
+    value   TEXT NOT NULL
+);
 """
 
 
@@ -63,3 +67,25 @@ class Store:
                 connection.execute("INSERT OR IGNORE INTO hidden_items (item_id) VALUES (?)", (item_id,))
             else:
                 connection.execute("DELETE FROM hidden_items WHERE item_id = ?", (item_id,))
+
+    def get_metadata(self, item_id: str) -> Any | None:
+        with self._connect() as connection:
+            row = connection.execute("SELECT value FROM metadata WHERE item_id = ?", (item_id,)).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def all_metadata(self) -> dict[str, Any]:
+        with self._connect() as connection:
+            rows = connection.execute("SELECT item_id, value FROM metadata").fetchall()
+        return {row[0]: json.loads(row[1]) for row in rows}
+
+    def put_metadata(self, item_id: str, value: Any) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO metadata (item_id, value) VALUES (?, ?) "
+                "ON CONFLICT(item_id) DO UPDATE SET value = excluded.value",
+                (item_id, json.dumps(value)),
+            )
+
+    def delete_metadata(self, item_id: str) -> None:
+        with self._connect() as connection:
+            connection.execute("DELETE FROM metadata WHERE item_id = ?", (item_id,))

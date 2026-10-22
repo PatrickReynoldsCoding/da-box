@@ -62,7 +62,7 @@ install_packages() {
     avahi-daemon libnss-mdns nftables network-manager polkitd systemd-timesyncd \
     libgl1-mesa-dri libegl1 libgles2 libgl1 libwayland-client0 libwayland-cursor0 \
     libwayland-egl1 libxkbcommon0 libdecor-0-0 fontconfig fonts-dejavu-core \
-    alsa-utils ca-certificates curl unzip rsync
+    alsa-utils ca-certificates curl unzip rsync udisks2 tinyproxy
 }
 
 create_users() {
@@ -125,7 +125,7 @@ write_config() {
     renderer_lines=$'WLR_RENDERER=pixman\nWLR_NO_HARDWARE_CURSORS=1\nLIBGL_ALWAYS_SOFTWARE=1'
   fi
   cat > "$CONFIG_DIR/kiosk.env" <<EOF
-DABOX_PLAY_ROOTS=$MEDIA_DIR
+DABOX_PLAY_ROOTS=$MEDIA_DIR:/media
 DABOX_MPV_ARGS=$mpv_arguments
 $renderer_lines
 EOF
@@ -133,6 +133,8 @@ EOF
 DABOX_MEDIA_DIR=$MEDIA_DIR
 DABOX_DATA_DIR=$DATA_DIR
 DABOX_PORT=80
+HTTPS_PROXY=http://127.0.0.1:8888
+NO_PROXY=127.0.0.1,localhost
 EOF
 }
 
@@ -144,6 +146,9 @@ install_system_files() {
   install -d /etc/polkit-1/rules.d
   install -m 0644 "$templates/50-dabox.rules" /etc/polkit-1/rules.d/50-dabox.rules
   install -m 0644 "$templates/99-dabox-sysctl.conf" /etc/sysctl.d/99-dabox.conf
+  install -m 0644 "$templates/99-dabox-usb.rules" /etc/udev/rules.d/99-dabox-usb.rules
+  install -m 0644 "$templates/tinyproxy.conf" /etc/tinyproxy/tinyproxy.conf
+  install -m 0644 "$templates/dabox-filter" /etc/tinyproxy/dabox-filter
 
   local ssh_rule=""
   $keep_ssh && ssh_rule="ip saddr @home4 tcp dport 22 accept; ip6 saddr @home6 tcp dport 22 accept"
@@ -176,6 +181,10 @@ enable_services() {
   step "Starting da-box"
   systemctl daemon-reload
   sysctl --system >/dev/null
+  udevadm control --reload
+  systemctl enable --now udisks2 >/dev/null 2>&1 || true
+  systemctl enable tinyproxy >/dev/null 2>&1
+  systemctl restart tinyproxy
   systemctl enable --now avahi-daemon systemd-timesyncd >/dev/null 2>&1 || true
   systemctl enable nftables dabox-service dabox-kiosk
   systemctl set-default graphical.target

@@ -11,8 +11,11 @@ from pydantic import BaseModel, Field
 
 from dabox.auth import LockedOut, LoginSucceeded, NoPinSet, WrongPin
 from dabox.box_api import art_response
+from dabox.copying import CopyRejected, box_id_after_copy, copy_to_box
 from dabox.library import read_album_tags
+from dabox.metadata import Accounts, ArtOption, Candidate, Metadata, MetadataError
 from dabox.models import LimitSettings
+from dabox.usb import UsbStick
 from dabox.services import SESSION_COOKIE, Services, get_services, require_admin
 from dabox.uploads import (
     UploadRejected,
@@ -68,6 +71,31 @@ class UploadResult(BaseModel):
     saved: list[str]
 
 
+class SearchRequest(BaseModel):
+    title: str = ""
+    year: int | None = None
+    artist: str | None = None
+
+
+class ArtUrlRequest(BaseModel):
+    url: str
+
+
+class EditRequest(BaseModel):
+    title: str | None = None
+    year: int | None = None
+    plot: str | None = None
+
+
+class AccountsView(BaseModel):
+    tmdb_api_key_set: bool
+
+
+class AccountsRequest(BaseModel):
+    # Empty string removes the key. None keeps the current key.
+    tmdb_api_key: str | None = None
+
+
 @public_router.get("/session")
 def session(request: Request, services: Services = Depends(get_services)) -> SessionView:
     logged_in = services.auth.is_session_valid(request.cookies.get(SESSION_COOKIE), datetime.now())
@@ -116,10 +144,11 @@ def set_parent_mode(body: ParentModeRequest, services: Services = Depends(get_se
 @router.get("/content")
 def content(services: Services = Depends(get_services)) -> ContentView:
     hidden_ids = services.store.hidden_item_ids()
+    metadata = services.metadata.store.all()
     library = services.library.library
     return ContentView(
-        films=[film_view(film, hidden_ids, ART_PREFIX) for film in library.films],
-        albums=[album_view(album, hidden_ids, ART_PREFIX) for album in library.albums],
+        films=[film_view(film, hidden_ids, metadata.get(film.id), ART_PREFIX) for film in library.films],
+        albums=[album_view(album, hidden_ids, metadata.get(album.id), ART_PREFIX) for album in library.albums],
     )
 
 
@@ -130,17 +159,122 @@ def art(item_id: str, services: Services = Depends(get_services)) -> FileRespons
 
 @router.post("/content/{item_id}/hidden")
 def set_hidden(item_id: str, body: HiddenRequest, services: Services = Depends(get_services)) -> None:
-    library = services.library.library
-    known_ids = {item.id for item in [*library.films, *library.albums]}
-    if item_id not in known_ids:
-        raise HTTPException(status_code=404, detail="No such item")
+    services.item_or_404(item_id)
     services.store.set_hidden(item_id, body.hidden)
 
 
 @router.post("/rescan")
 def rescan(services: Services = Depends(get_services)) -> ContentView:
-    services.library.rescan()
+    services.rescan_library()
     return content(services)
+
+
+@router.get("/usb")
+def usb_sticks(services: Services = Depends(get_services)) -> list[UsbStick]:
+    return services.library.library.sticks
+
+
+@router.post("/content/{item_id}/copy-to-box")
+def copy_item_to_box(item_id: str, services: Services = Depends(get_services)) -> ContentView:
+    item = services.item_or_404(item_id)
+    media_dir = services.library.media_dir
+    try:
+        destination = copy_to_box(item, media_dir)
+    except CopyRejected as rejection:
+        raise HTTPException(status_code=409, detail=str(rejection)) from rejection
+    # Box items get path-based ids, so carry the metadata and hidden state over.
+    new_id = box_id_after_copy(item, destination, media_dir)
+    metadata = services.metadata.store.get(item.id)
+    if metadata is not None:
+        if metadata.art_file:
+            cached = services.metadata.store.art_dir / metadata.art_file
+            metadata.art_file = services.metadata.store.save_art(new_id, cached.read_bytes())
+        services.metadata.store.put(new_id, metadata)
+    if item.id in services.store.hidden_item_ids():
+        services.store.set_hidden(new_id, True)
+    services.rescan_library()
+    return content(services)
+
+
+def _metadata_error(error: MetadataError) -> HTTPException:
+    return HTTPException(status_code=422, detail=str(error))
+
+
+@router.get("/content/{item_id}/metadata")
+def get_metadata(item_id: str, services: Services = Depends(get_services)) -> Metadata | None:
+    services.item_or_404(item_id)
+    return services.metadata.store.get(item_id)
+
+
+@router.post("/content/{item_id}/metadata/search")
+def search_metadata(item_id: str, body: SearchRequest, services: Services = Depends(get_services)) -> list[Candidate]:
+    item = services.item_or_404(item_id)
+    try:
+        return services.metadata.search(item, body.title, body.year, body.artist)
+    except MetadataError as error:
+        raise _metadata_error(error) from error
+
+
+@router.post("/content/{item_id}/metadata/apply")
+def apply_metadata(item_id: str, candidate: Candidate, services: Services = Depends(get_services)) -> Metadata:
+    item = services.item_or_404(item_id)
+    try:
+        return services.metadata.apply_candidate(item, candidate)
+    except MetadataError as error:
+        raise _metadata_error(error) from error
+
+
+@router.get("/content/{item_id}/metadata/art-options")
+def art_options(item_id: str, services: Services = Depends(get_services)) -> list[ArtOption]:
+    item = services.item_or_404(item_id)
+    return services.metadata.art_options(item)
+
+
+@router.post("/content/{item_id}/metadata/art")
+def choose_art(item_id: str, body: ArtUrlRequest, services: Services = Depends(get_services)) -> Metadata:
+    item = services.item_or_404(item_id)
+    try:
+        return services.metadata.set_art_from_url(item, body.url)
+    except MetadataError as error:
+        raise _metadata_error(error) from error
+
+
+@router.post("/content/{item_id}/metadata/art-upload")
+def upload_art(item_id: str, image: UploadFile = File(...), services: Services = Depends(get_services)) -> Metadata:
+    item = services.item_or_404(item_id)
+    try:
+        return services.metadata.set_art(item, image.file.read())
+    except MetadataError as error:
+        raise _metadata_error(error) from error
+
+
+@router.put("/content/{item_id}/metadata")
+def edit_metadata(item_id: str, body: EditRequest, services: Services = Depends(get_services)) -> Metadata:
+    item = services.item_or_404(item_id)
+    return services.metadata.edit(item, body.title, body.year, body.plot)
+
+
+@router.delete("/content/{item_id}/metadata")
+def reset_metadata(item_id: str, services: Services = Depends(get_services)) -> None:
+    """Forgets the metadata. Items without art of their own get fetched again."""
+    services.item_or_404(item_id)
+    services.metadata.store.delete(item_id)
+    services.metadata_wanted.set()
+
+
+@router.get("/accounts")
+def get_accounts(services: Services = Depends(get_services)) -> AccountsView:
+    return AccountsView(tmdb_api_key_set=bool(services.metadata.store.accounts().tmdb_api_key))
+
+
+@router.put("/accounts")
+def put_accounts(body: AccountsRequest, services: Services = Depends(get_services)) -> AccountsView:
+    accounts = services.metadata.store.accounts()
+    if body.tmdb_api_key is not None:
+        accounts = Accounts(tmdb_api_key=body.tmdb_api_key.strip())
+    services.metadata.save_accounts(accounts)
+    services.metadata_wanted.set()
+    return get_accounts(services)
 
 
 def _reject_existing(destination: Path) -> None:
@@ -172,7 +306,7 @@ def upload_film(
         save_stream(poster.file, poster_destination)
         saved.append(poster_destination.name)
 
-    services.library.rescan()
+    services.rescan_library()
     return UploadResult(saved=saved)
 
 
@@ -206,7 +340,7 @@ def upload_music(
         shutil.move(incoming_path, destination)
         saved.append(str(destination.relative_to(media_dir)))
 
-    services.library.rescan()
+    services.rescan_library()
     return UploadResult(saved=saved)
 
 

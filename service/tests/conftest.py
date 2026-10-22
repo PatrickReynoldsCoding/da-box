@@ -6,11 +6,37 @@ from fastapi.testclient import TestClient
 from dabox.app import build_services, create_app
 from dabox.config import ServiceConfig
 from dabox.services import Services
+from dabox.metadata import HttpError
 from dabox.system import FakeNetwork, FakeTimezone
+from dabox.usb import FakeUsb
 
 BOX_ADDRESS = ("127.0.0.1", 50000)
 PHONE_ADDRESS = ("192.168.1.20", 50000)
 TEST_PIN = "2468"
+
+
+JPEG_BYTES = b"\xff\xd8\xff fake jpeg"
+
+
+class FakeHttp:
+    """Answers metadata requests from a dict of URL prefix -> JSON or bytes, and records the URLs."""
+
+    def __init__(self) -> None:
+        self.responses: dict[str, object] = {}
+        self.requested: list[str] = []
+
+    def _find(self, url: str) -> object:
+        self.requested.append(url)
+        for prefix in sorted(self.responses, key=len, reverse=True):
+            if url.startswith(prefix):
+                return self.responses[prefix]
+        raise HttpError(404, url)
+
+    def get_json(self, url: str, headers: dict[str, str] | None = None) -> object:
+        return self._find(url)
+
+    def get_bytes(self, url: str) -> bytes:
+        return self._find(url)  # type: ignore[return-value]
 
 
 def write_file(path: Path, content: bytes = b"not really media") -> Path:
@@ -56,21 +82,33 @@ def timezone_backend() -> FakeTimezone:
 
 
 @pytest.fixture
-def services(tmp_path: Path, media_dir: Path, timezone_backend: FakeTimezone) -> Services:
+def usb_root(tmp_path: Path) -> Path:
+    root = tmp_path / "usb"
+    root.mkdir()
+    return root
+
+
+@pytest.fixture
+def fake_http() -> FakeHttp:
+    return FakeHttp()
+
+
+@pytest.fixture
+def services(tmp_path: Path, media_dir: Path, timezone_backend: FakeTimezone, usb_root: Path, fake_http: FakeHttp) -> Services:
     config = ServiceConfig(media_dir=media_dir, data_dir=tmp_path / "data", host="127.0.0.1", port=80, dev_mode=True)
-    return build_services(config, FakeNetwork(), timezone_backend)
+    return build_services(config, FakeNetwork(), timezone_backend, FakeUsb(usb_root), fake_http)
 
 
 @pytest.fixture
 def box_client(services: Services):
-    with TestClient(create_app(services), client=BOX_ADDRESS) as client:
+    with TestClient(create_app(services, run_workers=False), client=BOX_ADDRESS) as client:
         yield client
 
 
 @pytest.fixture
 def phone_client(services: Services, box_client: TestClient):
     # Depends on box_client so the app lifespan (library scan) has run.
-    with TestClient(create_app(services), client=PHONE_ADDRESS) as client:
+    with TestClient(create_app(services, run_workers=False), client=PHONE_ADDRESS) as client:
         yield client
 
 

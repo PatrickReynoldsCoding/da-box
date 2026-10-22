@@ -53,6 +53,8 @@
         <div class="card">
           <h2>Library</h2>
           <p id="library-summary" class="muted"></p>
+          <h3>USB sticks</h3>
+          <ul id="usb-list" class="plain"></ul>
         </div>
       </div>
 
@@ -62,6 +64,7 @@
             <h2>Films</h2>
             <button id="rescan" class="secondary">Rescan files</button>
           </div>
+          <p class="muted small">Tap an item to change its art and details.</p>
           <ul id="film-list" class="items"></ul>
         </div>
         <div class="card">
@@ -112,6 +115,18 @@
           <p class="message"></p>
         </form>
 
+        <form id="accounts-form" class="card">
+          <h2>Metadata accounts</h2>
+          <p class="muted">Film art and details come from TMDB. Get a free API key at themoviedb.org (Settings → API). Music art needs no account.</p>
+          <p id="tmdb-status" class="muted"></p>
+          <label>TMDB API key or read access token <input name="tmdb_api_key" autocomplete="off"></label>
+          <div class="row">
+            <button type="submit">Save key</button>
+            <button type="button" id="remove-tmdb" class="secondary">Remove key</button>
+          </div>
+          <p class="message"></p>
+        </form>
+
         <form id="pin-form" class="card">
           <h2>Change PIN</h2>
           <label>Current PIN <input name="current_pin" type="password" inputmode="numeric" required></label>
@@ -128,6 +143,54 @@
       </div>
     </section>
   </main>
+
+  <dialog id="item-dialog">
+    <form method="dialog" class="dialog-close"><button class="link" aria-label="Close">Close</button></form>
+    <div class="item-top">
+      <img id="item-art" alt="">
+      <div>
+        <h2 id="item-title"></h2>
+        <p id="item-sub" class="muted"></p>
+        <p id="item-status" class="muted small"></p>
+      </div>
+    </div>
+
+    <form id="item-edit">
+      <h3>Details</h3>
+      <label>Title <input name="title"></label>
+      <label>Year <input name="year" type="number" min="1900" max="2100"></label>
+      <label class="film-only">Plot <textarea name="plot" rows="3"></textarea></label>
+      <div class="row">
+        <button type="submit">Save details</button>
+        <button type="button" id="item-reset" class="secondary">Reset and fetch again</button>
+      </div>
+    </form>
+
+    <form id="item-search">
+      <h3>Find a match</h3>
+      <label class="album-only">Artist <input name="artist"></label>
+      <label><span class="film-only">Film title</span><span class="album-only">Album title</span> <input name="title"></label>
+      <label class="film-only">Year <input name="year" type="number" min="1900" max="2100"></label>
+      <button type="submit">Search</button>
+      <ul id="candidates" class="candidates"></ul>
+    </form>
+
+    <div>
+      <h3>Art</h3>
+      <div class="row">
+        <button type="button" id="art-options-button" class="secondary">Show other art</button>
+        <label class="button secondary">Upload image <input id="art-upload" type="file" accept="image/jpeg,image/png" hidden></label>
+      </div>
+      <div id="art-options" class="art-grid"></div>
+    </div>
+
+    <div id="copy-section">
+      <h3>USB stick</h3>
+      <p class="muted">This item is on the USB stick "<span id="item-stick"></span>". Copy it to the box to keep it after the stick is removed.</p>
+      <button type="button" id="copy-to-box">Copy to the box</button>
+    </div>
+    <p id="item-message" class="message"></p>
+  </dialog>
 
   <script src="app.js"></script>
 </body>

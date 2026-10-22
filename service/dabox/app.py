@@ -6,9 +6,11 @@ from fastapi.staticfiles import StaticFiles
 
 from dabox import admin_api, box_api
 from dabox.auth import AdminAuth
+from dabox.background import BackgroundWorkers
 from dabox.box_state import BoxState
 from dabox.config import ServiceConfig
 from dabox.library import LibraryIndex
+from dabox.metadata import HttpClient, MetadataService, MetadataStore, UrllibClient
 from dabox.services import Services
 from dabox.store import Store
 from dabox.system import (
@@ -19,6 +21,7 @@ from dabox.system import (
     TimedatectlTimezone,
     TimezoneBackend,
 )
+from dabox.usb import FakeUsb, UdisksUsb, UsbBackend
 
 ADMIN_WEB_DIR = Path(__file__).parent / "admin_web"
 
@@ -27,6 +30,8 @@ def build_services(
     config: ServiceConfig,
     network: NetworkBackend,
     timezone_backend: TimezoneBackend,
+    usb: UsbBackend,
+    http_client: HttpClient,
 ) -> Services:
     store = Store(config.data_dir / "dabox.db")
     auth = AdminAuth(store)
@@ -36,6 +41,8 @@ def build_services(
         box_state=BoxState(store, auth, timezone_backend),
         library=LibraryIndex(config.media_dir),
         network=network,
+        usb=usb,
+        metadata=MetadataService(MetadataStore(store, config.data_dir / "art"), http_client),
         incoming_dir=config.data_dir / "incoming",
         admin_port=config.port,
     )
@@ -43,20 +50,27 @@ def build_services(
 
 def default_services(config: ServiceConfig) -> Services:
     if config.dev_mode:
-        return build_services(config, FakeNetwork(), FakeTimezone())
-    return build_services(config, NmcliNetwork(), TimedatectlTimezone())
+        return build_services(config, FakeNetwork(), FakeTimezone(), FakeUsb(config.fake_usb_dir), UrllibClient())
+    return build_services(config, NmcliNetwork(), TimedatectlTimezone(), UdisksUsb(), UrllibClient())
 
 
-def create_app(services: Services) -> FastAPI:
+def create_app(services: Services, run_workers: bool = True) -> FastAPI:
+    workers = BackgroundWorkers(services)
+
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         # The service starts at boot, so this is how "shut-down turns parent mode off" works.
         services.box_state.set_parent_mode(False)
-        services.library.rescan()
+        services.rescan_library()
+        if run_workers:
+            workers.start()
         yield
+        if run_workers:
+            workers.stop()
 
     app = FastAPI(title="da-box", lifespan=lifespan)
     app.state.services = services
+    app.state.workers = workers
     app.include_router(box_api.router)
     app.include_router(admin_api.public_router)
     app.include_router(admin_api.router)

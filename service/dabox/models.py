@@ -4,6 +4,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from dabox.usb import UsbStick
+
 
 class Weekday(StrEnum):
     MON = "mon"
@@ -61,12 +63,23 @@ class SetupRequest(BaseModel):
     limits: LimitSettings
 
 
+class MediaSource(StrEnum):
+    BOX = "box"
+    USB = "usb"
+
+
 class Film(BaseModel):
     id: str
     title: str
     year: int | None
+    plot: str | None
     path: Path
+    # The film's own folder, or the video file itself for a loose file.
+    folder: Path
     art_path: Path | None
+    source: MediaSource
+    stick_label: str | None
+    fingerprint: str
 
 
 class Track(BaseModel):
@@ -76,6 +89,7 @@ class Track(BaseModel):
     album: str
     track_number: int | None
     path: Path
+    fingerprint: str
 
 
 class Album(BaseModel):
@@ -83,9 +97,13 @@ class Album(BaseModel):
     title: str
     artist: str
     art_path: Path | None
+    folder: Path
     tracks: list[Track]
+    source: MediaSource
+    stick_label: str | None
 
 
 class Library(BaseModel):
     films: list[Film]
     albums: list[Album]
+    sticks: list[UsbStick]

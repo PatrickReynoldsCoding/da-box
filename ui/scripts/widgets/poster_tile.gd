@@ -45,6 +45,7 @@ func _init(title: String, subtitle: String, art_path: String, colour: Color, squ
 		var badge_label := Label.new()
 		badge_label.text = badge
 		badge_label.add_theme_font_size_override("font_size", 24)
+		badge_label.add_theme_color_override("font_color", UiTheme.BACKGROUND_TOP)
 		badge_label.add_theme_stylebox_override("normal", UiTheme.rounded_box(UiTheme.WARNING, 12, 8))
 		badge_label.position = Vector2(12, 12)
 		frame.add_child(badge_label)
@@ -66,6 +67,16 @@ func _init(title: String, subtitle: String, art_path: String, colour: Color, squ
 	FocusPop.attach(self)
 	if not art_path.is_empty():
 		_load_art(art_path)
+
+
+## "USB", "Hidden", both, or nothing, for a film or album from the box API.
+static func badge_text(item: Dictionary) -> String:
+	var parts: Array[String] = []
+	if item.get("source") == "usb":
+		parts.append("USB")
+	if item.get("hidden", false):
+		parts.append("Hidden")
+	return " · ".join(parts)
 
 
 func _load_art(art_path: String) -> void:

@@ -7,3 +7,4 @@ dev/data/
 vm/work/
 ui/.godot/
 .DS_Store
+dev/usb/

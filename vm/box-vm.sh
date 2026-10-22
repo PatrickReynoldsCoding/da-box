@@ -8,6 +8,7 @@
 #   vm/box-vm.sh ssh [cmd] open a shell in the VM, or run one command
 #   vm/box-vm.sh keys K..  press keys on the VM keyboard (QEMU names: ret esc up down left right 2 a ...)
 #   vm/box-vm.sh screenshot FILE.png   save what the VM screen shows
+#   vm/box-vm.sh usb-in IMAGE   plug a disk image in as a USB stick;  usb-out pulls it out
 #   vm/box-vm.sh stop      shut the VM down
 #   vm/box-vm.sh destroy   delete the VM disk (keeps the Debian download)
 #
@@ -136,6 +137,19 @@ screenshot() {
   echo "$target"
 }
 
+usb_in() {
+  local image
+  image="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+  monitor_command "drive_add 0 if=none,id=usbstick,format=raw,file=$image"
+  monitor_command "device_add usb-storage,id=usbstickdev,drive=usbstick,removable=on"
+  echo "USB stick in: $image"
+}
+
+usb_out() {
+  monitor_command "device_del usbstickdev"
+  echo "USB stick out."
+}
+
 stop() {
   if ! is_running; then echo "The VM is not running."; return; fi
   vm_ssh "sudo poweroff" 2>/dev/null || echo "system_powerdown" | nc -U "$monitor" >/dev/null
@@ -158,7 +172,9 @@ case "$command" in
   ssh) wait_for_ssh >/dev/null; vm_ssh "$@" ;;
   keys) keys "$@" ;;
   screenshot) screenshot "$1" ;;
+  usb-in) usb_in "$1" ;;
+  usb-out) usb_out ;;
   stop) stop ;;
   destroy) destroy ;;
-  *) sed -n '2,15p' "$0"; exit 2 ;;
+  *) sed -n '2,16p' "$0"; exit 2 ;;
 esac

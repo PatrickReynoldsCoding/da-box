@@ -30,7 +30,10 @@ export DABOX_DEV=1
 export DABOX_MEDIA_DIR="$dev_dir/media"
 export DABOX_DATA_DIR="$dev_dir/data"
 export DABOX_PORT=8080
-export DABOX_PLAY_ROOTS="$dev_dir/media"
+# Every folder in dev/usb acts like a mounted USB stick.
+mkdir -p "$dev_dir/usb"
+export DABOX_FAKE_USB_DIR="$dev_dir/usb"
+export DABOX_PLAY_ROOTS="$dev_dir/media:$dev_dir/usb"
 export DABOX_AGENT_PORT=8091
 
 pids=()

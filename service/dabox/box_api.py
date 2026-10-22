@@ -53,27 +53,37 @@ def box_state(services: Services = Depends(get_services)) -> BoxStateView:
     )
 
 
+class _Listing:
+    """What the kid-side lists need: hidden items, metadata, parent mode and the USB setting."""
+
+    def __init__(self, services: Services) -> None:
+        self.hidden_ids = services.store.hidden_item_ids()
+        self.metadata = services.metadata.store.all()
+        self.show_hidden = services.box_state.parent_mode
+        limits = services.box_state.limits()
+        self.usb_allowed = limits.usb_playback if limits is not None else False
+
+
 @router.get("/films")
 def films(services: Services = Depends(get_services)) -> list[FilmView]:
-    hidden_ids = services.store.hidden_item_ids()
-    show_hidden = services.box_state.parent_mode
-    return [film_view(film, hidden_ids, ART_PREFIX) for film in visible_films(services.library.library, hidden_ids, show_hidden)]
+    listing = _Listing(services)
+    visible = visible_films(services.library.library, listing.hidden_ids, listing.show_hidden, listing.usb_allowed)
+    return [film_view(film, listing.hidden_ids, listing.metadata.get(film.id), ART_PREFIX) for film in visible]
 
 
 @router.get("/music/albums")
 def albums(services: Services = Depends(get_services)) -> list[AlbumView]:
-    hidden_ids = services.store.hidden_item_ids()
-    show_hidden = services.box_state.parent_mode
-    return [album_view(album, hidden_ids, ART_PREFIX) for album in visible_albums(services.library.library, hidden_ids, show_hidden)]
+    listing = _Listing(services)
+    visible = visible_albums(services.library.library, listing.hidden_ids, listing.show_hidden, listing.usb_allowed)
+    return [album_view(album, listing.hidden_ids, listing.metadata.get(album.id), ART_PREFIX) for album in visible]
 
 
 @router.get("/music/albums/{album_id}")
 def album(album_id: str, services: Services = Depends(get_services)) -> AlbumDetailView:
-    hidden_ids = services.store.hidden_item_ids()
-    show_hidden = services.box_state.parent_mode
-    for candidate in visible_albums(services.library.library, hidden_ids, show_hidden):
+    listing = _Listing(services)
+    for candidate in visible_albums(services.library.library, listing.hidden_ids, listing.show_hidden, listing.usb_allowed):
         if candidate.id == album_id:
-            return album_detail_view(candidate, hidden_ids, ART_PREFIX)
+            return album_detail_view(candidate, listing.hidden_ids, listing.metadata.get(candidate.id), ART_PREFIX)
     raise HTTPException(status_code=404, detail="No such album")
 
 
@@ -83,10 +93,15 @@ def art(item_id: str, services: Services = Depends(get_services)) -> FileRespons
 
 
 def art_response(services: Services, item_id: str) -> FileResponse:
-    library = services.library.library
-    for item in [*library.films, *library.albums]:
-        if item.id == item_id and item.art_path is not None:
-            return FileResponse(item.art_path)
+    """Art the parent picked or the box fetched comes first, then art next to the media."""
+    item = services.item_or_404(item_id)
+    metadata = services.metadata.store.get(item_id)
+    if metadata is not None and metadata.art_file is not None:
+        cached = services.metadata.store.art_dir / metadata.art_file
+        if cached.is_file():
+            return FileResponse(cached)
+    if item.art_path is not None:
+        return FileResponse(item.art_path)
     raise HTTPException(status_code=404, detail="No art for this item")
 
 

@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from dabox.library import (
+    ItemNamer,
     item_id,
     parse_film_name,
     parse_track_number,
@@ -43,7 +44,7 @@ def test_item_id_is_stable_and_kind_specific() -> None:
 
 
 def test_scan_films_reads_folders_and_loose_files(media_dir: Path) -> None:
-    films = scan_films(media_dir)
+    films = scan_films(ItemNamer(media_dir, None))
 
     assert [(film.title, film.year) for film in films] == [("Frozen", 2013), ("Home Movie", None)]
     frozen = films[0]
@@ -52,7 +53,7 @@ def test_scan_films_reads_folders_and_loose_files(media_dir: Path) -> None:
 
 
 def test_scan_music_groups_tracks_by_folder_and_uses_folder_names(media_dir: Path) -> None:
-    albums = scan_music(media_dir)
+    albums = scan_music(ItemNamer(media_dir, None))
 
     assert len(albums) == 1
     album = albums[0]
@@ -62,8 +63,8 @@ def test_scan_music_groups_tracks_by_folder_and_uses_folder_names(media_dir: Pat
 
 
 def test_scan_handles_missing_folders(tmp_path: Path) -> None:
-    assert scan_films(tmp_path) == []
-    assert scan_music(tmp_path) == []
+    assert scan_films(ItemNamer(tmp_path, None)) == []
+    assert scan_music(ItemNamer(tmp_path, None)) == []
 
 
 @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="needs ffmpeg to make a tagged file")
@@ -79,7 +80,7 @@ def test_scan_music_prefers_tags(tmp_path: Path) -> None:
         check=True,
     )
 
-    album = scan_music(tmp_path)[0]
+    album = scan_music(ItemNamer(tmp_path, None))[0]
 
     assert (album.artist, album.title) == ("Tag Artist", "Tag Album")
     assert (album.tracks[0].title, album.tracks[0].track_number) == ("Tagged Title", 4)

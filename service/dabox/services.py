@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
@@ -7,8 +8,11 @@ from fastapi import HTTPException, Request
 from dabox.auth import AdminAuth
 from dabox.box_state import BoxState
 from dabox.library import LibraryIndex
+from dabox.metadata import MetadataService
+from dabox.models import Album, Film
 from dabox.store import Store
 from dabox.system import NetworkBackend
+from dabox.usb import UsbBackend, UsbStick
 
 SESSION_COOKIE = "dabox_session"
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
@@ -21,8 +25,22 @@ class Services:
     box_state: BoxState
     library: LibraryIndex
     network: NetworkBackend
+    usb: UsbBackend
+    metadata: MetadataService
     incoming_dir: Path
     admin_port: int
+    # Set to wake the metadata worker after the library changes.
+    metadata_wanted: threading.Event = field(default_factory=threading.Event)
+
+    def rescan_library(self, sticks: list[UsbStick] | None = None) -> None:
+        self.library.rescan(sticks)
+        self.metadata_wanted.set()
+
+    def item_or_404(self, item_id: str) -> Film | Album:
+        item = self.library.find(item_id)
+        if item is None:
+            raise HTTPException(status_code=404, detail="No such item")
+        return item
 
 
 def get_services(request: Request) -> Services:

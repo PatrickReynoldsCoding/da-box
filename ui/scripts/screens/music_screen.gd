@@ -50,7 +50,7 @@ func _load() -> void:
 		_body.add_child(empty_message("No music yet. Ask a grown-up to add some!"))
 		return
 	for album in albums:
-		var badge := "Hidden" if album["hidden"] else ""
+		var badge := PosterTile.badge_text(album)
 		var art_url: String = album["art_url"] if album["art_url"] is String else ""
 		var tile := PosterTile.new(album["title"], album["artist"], art_url, UiTheme.MUSIC.darkened(0.3), true, badge)
 		tile.pressed.connect(func() -> void: open_screen.emit(AlbumScreen.new(album["id"])))

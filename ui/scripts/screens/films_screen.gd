@@ -36,7 +36,7 @@ func _load() -> void:
 		return
 	for film in films:
 		var year_text := str(int(film["year"])) if film["year"] != null else ""
-		var badge := "Hidden" if film["hidden"] else ""
+		var badge := PosterTile.badge_text(film)
 		var tile := PosterTile.new(film["title"], year_text, _text_or_empty(film["art_url"]), UiTheme.FILMS.darkened(0.3), false, badge)
 		tile.pressed.connect(_play.bind(film))
 		_grid.add_child(tile)

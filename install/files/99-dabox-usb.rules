@@ -1,0 +1,2 @@
+# USB sticks mount under /media/<label> (not /media/tvbox/), so the kid user can read them too.
+ENV{ID_BUS}=="usb", ENV{ID_FS_USAGE}=="filesystem", ENV{UDISKS_FILESYSTEM_SHARED}="1"

@@ -100,9 +100,21 @@ function renderParentMode(enabled) {
 }
 
 async function loadHome() {
-  const status = await api("/status");
+  const [status, sticks] = await Promise.all([api("/status"), api("/usb")]);
   renderParentMode(status.parent_mode);
   $("#library-summary").textContent = `${status.film_count} films, ${status.album_count} albums. Time zone: ${status.timezone ?? "not set"}.`;
+  const rows = sticks.map((stick) => {
+    const row = document.createElement("li");
+    row.textContent = `${stick.label} (${stick.path})`;
+    return row;
+  });
+  if (rows.length === 0) {
+    const none = document.createElement("li");
+    none.className = "muted";
+    none.textContent = "No USB stick in the box.";
+    rows.push(none);
+  }
+  $("#usb-list").replaceChildren(...rows);
 }
 
 $("#parent-mode").addEventListener("change", async (event) => {
@@ -112,8 +124,12 @@ $("#parent-mode").addEventListener("change", async (event) => {
 
 // ---- Content ----
 
-function itemRow(item, subtitle, artClass) {
+const contentById = new Map();
+
+function itemRow(item, subtitle, artClass, kind) {
+  contentById.set(item.id, { ...item, kind });
   const row = document.createElement("li");
+  row.addEventListener("click", () => openItem(item.id));
   const art = item.art_url ? document.createElement("img") : document.createElement("div");
   if (item.art_url) {
     art.src = item.art_url;
@@ -128,6 +144,12 @@ function itemRow(item, subtitle, artClass) {
   info.className = "info";
   const title = document.createElement("div");
   title.textContent = item.title;
+  if (item.source === "usb") {
+    const badge = document.createElement("span");
+    badge.className = "badge";
+    badge.textContent = "USB";
+    title.append(badge);
+  }
   const sub = document.createElement("div");
   sub.className = "sub";
   sub.textContent = subtitle;
@@ -135,6 +157,7 @@ function itemRow(item, subtitle, artClass) {
 
   const toggle = document.createElement("label");
   toggle.className = "switch";
+  toggle.addEventListener("click", (event) => event.stopPropagation());
   toggle.innerHTML = '<input type="checkbox"><span class="slider"></span><span></span>';
   const checkbox = $("input", toggle);
   const label = $("span:last-child", toggle);
@@ -152,12 +175,13 @@ function itemRow(item, subtitle, artClass) {
 
 function renderContent(content) {
   const filmList = $("#film-list");
-  filmList.replaceChildren(...content.films.map((film) => itemRow(film, film.year ?? "")));
+  contentById.clear();
+  filmList.replaceChildren(...content.films.map((film) => itemRow(film, film.year ?? "", null, "film")));
   filmList.classList.toggle("empty", content.films.length === 0);
 
   const albumList = $("#album-list");
   albumList.replaceChildren(
-    ...content.albums.map((album) => itemRow(album, `${album.artist} · ${album.track_count} tracks`, "album-art")),
+    ...content.albums.map((album) => itemRow(album, `${album.artist} · ${album.track_count} tracks`, "album-art", "album")),
   );
   albumList.classList.toggle("empty", content.albums.length === 0);
 }
@@ -247,6 +271,7 @@ function renderDayRows(limits) {
 }
 
 async function loadSettings() {
+  loadAccounts();
   const limits = await api("/settings");
   const form = $("#settings-form");
   form.daily_quota_minutes.value = limits.daily_quota_minutes;
@@ -302,6 +327,202 @@ $("#pin-form").addEventListener("submit", async (event) => {
   } catch (error) {
     setMessage(message, describeValidationError(error), "error");
   }
+});
+
+// ---- Item details (metadata, art, copy to box) ----
+
+const STATUS_TEXT = {
+  matched: "Details and art were found online.",
+  not_found: "Nothing was found online. Search below, or edit the details.",
+  no_account: "Waiting for a TMDB API key (Settings).",
+  failed: "The last online search failed. Try again below.",
+  manual: "Details set by hand.",
+};
+
+let openItemId = null;
+
+function itemMessage(text, kind) {
+  setMessage($("#item-message"), text, kind);
+}
+
+function renderItem(item) {
+  document.body.classList.toggle("is-film", item.kind === "film");
+  document.body.classList.toggle("is-album", item.kind === "album");
+  const art = $("#item-art");
+  art.src = item.art_url ? `${item.art_url}?v=${Date.now()}` : "";
+  art.style.visibility = item.art_url ? "visible" : "hidden";
+  $("#item-title").textContent = item.title;
+  $("#item-sub").textContent = item.kind === "film" ? (item.year ?? "") : `${item.artist}${item.year ? ` · ${item.year}` : ""}`;
+  $("#item-status").textContent = STATUS_TEXT[item.metadata_status] ?? "Using the files' own details.";
+
+  const edit = $("#item-edit");
+  edit.title.value = item.title;
+  edit.year.value = item.year ?? "";
+  edit.plot.value = item.plot ?? "";
+
+  const search = $("#item-search");
+  search.title.value = item.title;
+  search.year.value = item.year ?? "";
+  search.artist.value = item.artist ?? "";
+  $("#candidates").replaceChildren();
+  $("#art-options").replaceChildren();
+
+  $("#copy-section").hidden = item.source !== "usb";
+  $("#item-stick").textContent = item.stick_label ?? "";
+}
+
+async function refreshOpenItem() {
+  const content = await api("/content");
+  renderContent(content);
+  const item = contentById.get(openItemId);
+  if (item) renderItem(item);
+  return item;
+}
+
+function openItem(itemId) {
+  openItemId = itemId;
+  renderItem(contentById.get(itemId));
+  itemMessage("");
+  $("#item-dialog").showModal();
+}
+
+$("#item-edit").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.target;
+  try {
+    await api(`/content/${openItemId}/metadata`, {
+      method: "PUT",
+      body: { title: form.title.value, year: form.year.value ? Number(form.year.value) : null, plot: form.plot.value },
+    });
+    await refreshOpenItem();
+    itemMessage("Saved.", "ok");
+  } catch (error) {
+    itemMessage(describeValidationError(error), "error");
+  }
+});
+
+$("#item-reset").addEventListener("click", async () => {
+  await api(`/content/${openItemId}/metadata`, { method: "DELETE" });
+  itemMessage("Reset. The box looks for details again in a few seconds.", "ok");
+  setTimeout(refreshOpenItem, 4000);
+  await refreshOpenItem();
+});
+
+function candidateRow(candidate) {
+  const row = document.createElement("li");
+  const image = document.createElement("img");
+  image.alt = "";
+  // Not every match has a cover. Show an empty box instead of a broken image.
+  image.addEventListener("error", () => image.removeAttribute("src"));
+  if (candidate.preview_url) image.src = candidate.preview_url;
+  const info = document.createElement("div");
+  const title = document.createElement("div");
+  title.textContent = `${candidate.title}${candidate.year ? ` (${candidate.year})` : ""}`;
+  const sub = document.createElement("div");
+  sub.className = "sub";
+  sub.textContent = [candidate.artist, candidate.description].filter(Boolean).join(" · ").slice(0, 160);
+  info.append(title, sub);
+  row.append(image, info);
+  row.addEventListener("click", async () => {
+    itemMessage("Saving…");
+    try {
+      await api(`/content/${openItemId}/metadata/apply`, { method: "POST", body: candidate });
+      await refreshOpenItem();
+      itemMessage("Match saved.", "ok");
+    } catch (error) {
+      itemMessage(describeValidationError(error), "error");
+    }
+  });
+  return row;
+}
+
+$("#item-search").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.target;
+  itemMessage("Searching…");
+  try {
+    const candidates = await api(`/content/${openItemId}/metadata/search`, {
+      method: "POST",
+      body: { title: form.title.value, year: form.year.value ? Number(form.year.value) : null, artist: form.artist.value },
+    });
+    $("#candidates").replaceChildren(...candidates.map(candidateRow));
+    itemMessage(candidates.length ? "Pick the right one:" : "Nothing found. Try other words.");
+  } catch (error) {
+    itemMessage(describeValidationError(error), "error");
+  }
+});
+
+$("#art-options-button").addEventListener("click", async () => {
+  const options = await api(`/content/${openItemId}/metadata/art-options`);
+  if (options.length === 0) {
+    itemMessage("No other art. Find a match first, or upload an image.");
+    return;
+  }
+  $("#art-options").replaceChildren(...options.map((option) => {
+    const image = document.createElement("img");
+    image.src = option.preview_url;
+    image.alt = "";
+    image.loading = "lazy";
+    image.addEventListener("click", async () => {
+      await api(`/content/${openItemId}/metadata/art`, { method: "POST", body: { url: option.full_url } });
+      await refreshOpenItem();
+      itemMessage("Art saved.", "ok");
+    });
+    return image;
+  }));
+});
+
+$("#art-upload").addEventListener("change", async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+  const body = new FormData();
+  body.append("image", file);
+  const response = await fetch(`/api/admin/content/${openItemId}/metadata/art-upload`, { method: "POST", body });
+  event.target.value = "";
+  if (response.ok) {
+    await refreshOpenItem();
+    itemMessage("Art saved.", "ok");
+  } else {
+    itemMessage((await response.json()).detail ?? "Upload failed", "error");
+  }
+});
+
+$("#copy-to-box").addEventListener("click", async () => {
+  itemMessage("Copying… this can take a few minutes for a film.");
+  $("#copy-to-box").disabled = true;
+  try {
+    const content = await api(`/content/${openItemId}/copy-to-box`, { method: "POST" });
+    renderContent(content);
+    itemMessage("Copied to the box.", "ok");
+    $("#copy-section").hidden = true;
+  } catch (error) {
+    itemMessage(describeValidationError(error), "error");
+  } finally {
+    $("#copy-to-box").disabled = false;
+  }
+});
+
+// ---- Accounts ----
+
+async function loadAccounts() {
+  const accounts = await api("/accounts");
+  $("#tmdb-status").textContent = accounts.tmdb_api_key_set ? "A TMDB key is saved." : "No TMDB key yet.";
+}
+
+$("#accounts-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.target;
+  const message = $(".message", form);
+  if (!form.tmdb_api_key.value.trim()) return setMessage(message, "Paste a key first.", "error");
+  await api("/accounts", { method: "PUT", body: { tmdb_api_key: form.tmdb_api_key.value } });
+  form.reset();
+  setMessage(message, "Saved. The box now fetches film art.", "ok");
+  loadAccounts();
+});
+
+$("#remove-tmdb").addEventListener("click", async () => {
+  await api("/accounts", { method: "PUT", body: { tmdb_api_key: "" } });
+  loadAccounts();
 });
 
 $("#rerun-setup").addEventListener("click", async () => {

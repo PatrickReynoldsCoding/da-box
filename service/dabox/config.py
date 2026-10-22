@@ -9,9 +9,11 @@ class ServiceConfig:
     data_dir: Path
     host: str
     port: int
-    # Dev mode swaps real system calls (nmcli, timedatectl) for fakes so the
+    # Dev mode swaps real system calls (nmcli, timedatectl, udisks) for fakes so the
     # service runs on a Mac.
     dev_mode: bool
+    # Dev mode only: every folder in here counts as a mounted USB stick.
+    fake_usb_dir: Path | None = None
 
 
 def load_service_config() -> ServiceConfig:
@@ -21,4 +23,5 @@ def load_service_config() -> ServiceConfig:
         host=os.environ.get("DABOX_HOST", "0.0.0.0"),
         port=int(os.environ.get("DABOX_PORT", "80")),
         dev_mode=os.environ.get("DABOX_DEV") == "1",
+        fake_usb_dir=Path(os.environ["DABOX_FAKE_USB_DIR"]) if os.environ.get("DABOX_FAKE_USB_DIR") else None,
     )

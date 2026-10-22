@@ -88,7 +88,7 @@ def test_parent_mode_turns_off_at_start_up(services: Services) -> None:
     from tests.conftest import BOX_ADDRESS
 
     services.box_state.set_parent_mode(True)
-    with TestClient(create_app(services), client=BOX_ADDRESS) as client:
+    with TestClient(create_app(services, run_workers=False), client=BOX_ADDRESS) as client:
         assert client.get("/box/state").json()["parent_mode"] is False
 
 
