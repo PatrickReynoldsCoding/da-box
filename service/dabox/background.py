@@ -12,6 +12,7 @@ log = logging.getLogger(__name__)
 USB_POLL_SECONDS = 3.0
 METADATA_IDLE_SECONDS = 60.0
 GUIDE_IDLE_SECONDS = 300.0
+LIMITS_TICK_SECONDS = 2.0
 
 
 class BackgroundWorkers:
@@ -22,7 +23,7 @@ class BackgroundWorkers:
         self._stick_ids: list[str] | None = None
 
     def start(self) -> None:
-        for target in (self._watch_usb, self._fetch_metadata, self._keep_guide):
+        for target in (self._watch_usb, self._fetch_metadata, self._keep_guide, self._enforce_limits):
             thread = threading.Thread(target=target, daemon=True, name=target.__name__)
             thread.start()
             self._threads.append(thread)
@@ -48,7 +49,7 @@ class BackgroundWorkers:
         services = self._services
         library = services.library.library
         fetched = 0
-        for item in services.metadata.items_to_fetch([*library.films, *library.albums]):
+        for item in services.metadata.items_to_fetch([*library.films, *library.albums, *library.games]):
             if self._stop.is_set():
                 break
             try:
@@ -64,9 +65,9 @@ class BackgroundWorkers:
         services = self._services
         library = services.library.library
         files = {}
+        # USB films too: the limits need every film's length.
         for film in library.films:
-            if film.source == "box":
-                files[film.fingerprint] = film.path
+            files[film.fingerprint] = film.path
         for show in library.shows:
             for episode in show.episodes:
                 files[episode.fingerprint] = episode.path
@@ -90,6 +91,14 @@ class BackgroundWorkers:
                 log.exception("Guide update failed")
             self._services.guide_wanted.wait(GUIDE_IDLE_SECONDS)
             self._services.guide_wanted.clear()
+
+    def _enforce_limits(self) -> None:
+        while not self._stop.is_set():
+            try:
+                self._services.limits.tick()
+            except Exception:
+                log.exception("Limits check failed")
+            self._stop.wait(LIMITS_TICK_SECONDS)
 
     def _watch_usb(self) -> None:
         while not self._stop.is_set():

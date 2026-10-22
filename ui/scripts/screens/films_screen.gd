@@ -38,12 +38,22 @@ func _load() -> void:
 		var year_text := str(int(film["year"])) if film["year"] != null else ""
 		var badge := PosterTile.badge_text(film)
 		var tile := PosterTile.new(film["title"], year_text, _text_or_empty(film["art_url"]), UiTheme.FILMS.darkened(0.3), false, badge)
+		tile.set_unavailable(not Api.video_fits(_film_seconds(film)))
 		tile.pressed.connect(_play.bind(film))
 		_grid.add_child(tile)
 	default_focus().grab_focus()
 
 
+## Films with an unknown length count as 90 minutes, to be safe.
+static func _film_seconds(film: Dictionary) -> float:
+	return film["seconds"] if film.get("seconds") != null else 90.0 * 60.0
+
+
 func _play(film: Dictionary) -> void:
+	var refusal := await Api.approve_video(_film_seconds(film))
+	if not refusal.is_empty():
+		_message.text = refusal
+		return
 	var reply := await Api.agent_post("/play", {
 		"kind": "video",
 		"items": [{"path": film["path"], "title": film["title"]}],

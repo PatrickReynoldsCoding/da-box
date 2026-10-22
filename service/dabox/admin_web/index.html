@@ -44,6 +44,20 @@
 
       <div id="tab-home" class="tab">
         <div class="card">
+          <h2>Today</h2>
+          <p id="today-summary"></p>
+          <p id="today-games" class="muted"></p>
+          <p id="today-shutdown" class="message error"></p>
+          <h3>Extra time today</h3>
+          <div class="row wrap">
+            <button class="secondary" data-extra-quota="15">+15 min TV</button>
+            <button class="secondary" data-extra-quota="30">+30 min TV</button>
+            <button class="secondary" data-extra-games="15">+15 min games</button>
+            <button class="secondary" data-extra-games="30">+30 min games</button>
+          </div>
+          <p id="extra-message" class="message"></p>
+        </div>
+        <div class="card">
           <h2>Parent mode</h2>
           <p class="muted">Unlocks all content and removes all limits on the box. It turns off when the box shuts down, or with "Leave parent mode" on the TV.</p>
           <label class="switch big">
@@ -72,6 +86,11 @@
         <div class="card">
           <h2>Music</h2>
           <ul id="album-list" class="items"></ul>
+        </div>
+        <div class="card">
+          <h2>Games</h2>
+          <p class="muted small">Put games in Games/&lt;system&gt;/ (nes, snes, gb, gbc, gba, megadrive, psx). Only systems with an emulator on the box show here.</p>
+          <ul id="game-list" class="items"></ul>
         </div>
       </div>
 

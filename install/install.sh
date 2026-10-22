@@ -3,8 +3,10 @@
 # Run as root from a checkout of the repo:  sudo install/install.sh [options]
 #
 # Options:
-#   --keep-ssh   keep the SSH server running and allow SSH from the home network
-#   --vm         settings for a virtual machine without a GPU (software rendering)
+#   --keep-ssh     keep the SSH server running and allow SSH from the home network
+#   --vm           settings for a virtual machine without a GPU (software rendering)
+#   --extra-cores  also download Mega Drive and PlayStation emulators from the
+#                  libretro build server (Debian does not package them)
 #
 # The machine needs internet access while this runs. At the end the firewall
 # closes the internet for everything except time sync and DNS.
@@ -22,10 +24,12 @@ HOSTNAME_FOR_BOX="tvbox"
 
 keep_ssh=false
 vm=false
+extra_cores=false
 for argument in "$@"; do
   case "$argument" in
     --keep-ssh) keep_ssh=true ;;
     --vm) vm=true ;;
+    --extra-cores) extra_cores=true ;;
     *) echo "Unknown option: $argument" >&2; exit 2 ;;
   esac
 done
@@ -62,7 +66,9 @@ install_packages() {
     avahi-daemon libnss-mdns nftables network-manager polkitd systemd-timesyncd \
     libgl1-mesa-dri libegl1 libgles2 libgl1 libwayland-client0 libwayland-cursor0 \
     libwayland-egl1 libxkbcommon0 libdecor-0-0 fontconfig fonts-dejavu-core \
-    alsa-utils ca-certificates curl unzip rsync udisks2 tinyproxy ffmpeg
+    alsa-utils ca-certificates curl unzip rsync udisks2 tinyproxy ffmpeg \
+    retroarch libretro-core-info libretro-nestopia libretro-bsnes-mercury-performance \
+    libretro-gambatte libretro-mgba
 }
 
 create_users() {
@@ -75,7 +81,7 @@ create_users() {
   usermod -aG "$MEDIA_GROUP,video,render,input,audio" "$KID_USER"
   passwd --lock "$KID_USER" >/dev/null
 
-  install -d -o "$SERVICE_USER" -g "$MEDIA_GROUP" -m 2775 "$MEDIA_DIR" "$MEDIA_DIR/Films" "$MEDIA_DIR/Music"
+  install -d -o "$SERVICE_USER" -g "$MEDIA_GROUP" -m 2775 "$MEDIA_DIR" "$MEDIA_DIR/Films" "$MEDIA_DIR/Music" "$MEDIA_DIR/TV" "$MEDIA_DIR/Games"
   install -d -o "$SERVICE_USER" -g "$SERVICE_USER" -m 0750 "$DATA_DIR"
   install -d -m 0755 "$CONFIG_DIR"
 }
@@ -109,6 +115,44 @@ install_godot() {
   rm -f "/tmp/$zip_name"
 }
 
+install_games() {
+  step "Setting up RetroArch"
+  install -d "$INSTALL_DIR/retroarch" "$INSTALL_DIR/cores"
+  local password_file="$CONFIG_DIR/retroarch-kiosk-password"
+  [[ -f "$password_file" ]] || (umask 077; head -c 18 /dev/urandom | base64 > "$password_file")
+  sed -e "s|@KIOSK_PASSWORD@|$(cat "$password_file")|" -e "s|@CORE_DIR@|$INSTALL_DIR/cores|" \
+    "$templates/retroarch.cfg" > "$INSTALL_DIR/retroarch/retroarch.cfg"
+  chmod 0644 "$INSTALL_DIR/retroarch/retroarch.cfg"
+
+  if $extra_cores; then
+    local architecture core
+    architecture="$(godot_architecture | sed 's/arm64/aarch64/')"
+    for core in genesis_plus_gx pcsx_rearmed; do
+      step "Downloading the $core core"
+      curl -sSfL -o "/tmp/$core.zip" "https://buildbot.libretro.com/nightly/linux/$architecture/latest/${core}_libretro.so.zip"
+      unzip -o -q "/tmp/$core.zip" -d "$INSTALL_DIR/cores"
+      rm -f "/tmp/$core.zip"
+    done
+  fi
+
+  # One core folder: links to Debian's cores, next to any downloaded ones.
+  local debian_core
+  for debian_core in "$(debian_core_dir)"/*_libretro.so; do
+    [[ -e "$debian_core" ]] && ln -sf "$debian_core" "$INSTALL_DIR/cores/"
+  done
+}
+
+debian_core_dir() {
+  case "$(dpkg --print-architecture)" in
+    arm64) echo "/usr/lib/aarch64-linux-gnu/libretro" ;;
+    amd64) echo "/usr/lib/x86_64-linux-gnu/libretro" ;;
+  esac
+}
+
+core_dirs() {
+  echo "$INSTALL_DIR/cores"
+}
+
 import_ui() {
   step "Preparing the box UI"
   # Import once here, so the kid user never needs write access to the UI folder.
@@ -126,6 +170,9 @@ write_config() {
   fi
   cat > "$CONFIG_DIR/kiosk.env" <<EOF
 DABOX_PLAY_ROOTS=$MEDIA_DIR:/media
+DABOX_CORE_DIRS=$(core_dirs)
+DABOX_RETROARCH=/usr/bin/retroarch
+DABOX_RETROARCH_CONFIG=$INSTALL_DIR/retroarch/retroarch.cfg
 DABOX_MPV_ARGS=$mpv_arguments
 $renderer_lines
 EOF
@@ -133,6 +180,7 @@ EOF
 DABOX_MEDIA_DIR=$MEDIA_DIR
 DABOX_DATA_DIR=$DATA_DIR
 DABOX_PORT=80
+DABOX_CORE_DIRS=$(core_dirs)
 HTTPS_PROXY=http://127.0.0.1:8888
 NO_PROXY=127.0.0.1,localhost
 EOF
@@ -198,6 +246,7 @@ install_packages
 create_users
 install_code
 install_godot
+install_games
 import_ui
 write_config
 install_system_files

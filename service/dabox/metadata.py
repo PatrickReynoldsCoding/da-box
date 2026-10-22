@@ -16,10 +16,12 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel
 
-from dabox.models import Album, Film
+from dabox.models import Album, Film, Game
+from dabox.systems import SYSTEMS, thumbnail_file_name
 from dabox.store import Store
 
 USER_AGENT = "da-box/0.1 ( https://github.com/PatrickReynoldsCoding/da-box )"
+LIBRETRO_THUMBNAILS = "https://thumbnails.libretro.com"
 TMDB_API = "https://api.themoviedb.org/3"
 TMDB_IMAGES = "https://image.tmdb.org/t/p"
 MUSICBRAINZ_API = "https://musicbrainz.org/ws/2"
@@ -293,7 +295,9 @@ class MetadataService:
         key = self.store.accounts().tmdb_api_key
         return TmdbProvider(self._client, key) if key else None
 
-    def search(self, item: Film | Album, title: str, year: int | None, artist: str | None) -> list[Candidate]:
+    def search(self, item: Film | Album | Game, title: str, year: int | None, artist: str | None) -> list[Candidate]:
+        if isinstance(item, Game):
+            raise MetadataError("Games get box art by their file name. Upload a picture to change it.")
         if isinstance(item, Film):
             tmdb = self._tmdb()
             if tmdb is None:
@@ -316,9 +320,9 @@ class MetadataService:
         self.store.put(item.id, metadata)
         return metadata
 
-    def art_options(self, item: Film | Album) -> list[ArtOption]:
+    def art_options(self, item: Film | Album | Game) -> list[ArtOption]:
         metadata = self.store.get(item.id)
-        if metadata is None or metadata.provider_id is None:
+        if isinstance(item, Game) or metadata is None or metadata.provider_id is None:
             return []
         if metadata.provider == TmdbProvider.name:
             tmdb = self._tmdb()
@@ -349,9 +353,30 @@ class MetadataService:
         self.store.put(item.id, metadata)
         return metadata
 
-    def auto_fetch(self, item: Film | Album) -> Metadata:
+    def _fetch_game_art(self, game: Game) -> Metadata:
+        """libretro-thumbnails names box art after the game's No-Intro file name."""
+        system = SYSTEMS[game.system]
+        url = (
+            f"{LIBRETRO_THUMBNAILS}/{urllib.parse.quote(system.thumbnails_name)}/Named_Boxarts/"
+            f"{urllib.parse.quote(thumbnail_file_name(game.file_stem))}.png"
+        )
+        try:
+            data = self._client.get_bytes(url)
+        except HttpError as error:
+            if error.status != 404:
+                raise
+            metadata = Metadata(status=MetadataStatus.NOT_FOUND)
+            self.store.put(game.id, metadata)
+            return metadata
+        metadata = Metadata(status=MetadataStatus.MATCHED, provider="libretro-thumbnails", art_file=self.store.save_art(game.id, data))
+        self.store.put(game.id, metadata)
+        return metadata
+
+    def auto_fetch(self, item: Film | Album | Game) -> Metadata:
         """Best guess for an item with no art of its own: the first search result."""
         try:
+            if isinstance(item, Game):
+                return self._fetch_game_art(item)
             if isinstance(item, Film):
                 tmdb = self._tmdb()
                 if tmdb is None:
@@ -371,7 +396,7 @@ class MetadataService:
             self.store.put(item.id, metadata)
             raise MetadataError(f"Fetch failed: {error}") from error
 
-    def items_to_fetch(self, items: list[Film | Album]) -> list[Film | Album]:
+    def items_to_fetch(self, items: list[Film | Album | Game]) -> list[Film | Album | Game]:
         """Items with no art of their own and no metadata record yet."""
         records = self.store.all()
         return [item for item in items if item.art_path is None and item.id not in records]

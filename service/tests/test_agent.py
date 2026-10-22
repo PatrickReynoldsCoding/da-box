@@ -87,8 +87,8 @@ def test_script_messages_become_requests(tmp_path: Path) -> None:
     player = MpvPlayer("mpv", [tmp_path], [])
     player._handle_event({"event": "client-message", "args": ["dabox", "channel-up"]})
     player._handle_event({"event": "client-message", "args": ["other", "x"]})
-    assert player.status().requests == ["channel-up"]
-    assert player.status().requests == []
+    assert player.status(consume_requests=True).requests == ["channel-up"]
+    assert player.status(consume_requests=True).requests == []
 
 
 @pytest.mark.skipif(shutil.which("mpv") is None or shutil.which("ffmpeg") is None, reason="needs mpv and ffmpeg")
@@ -107,3 +107,48 @@ def test_real_mpv_starts_part_way_through(tmp_path: Path) -> None:
         assert status["mode"] == "channel"
     finally:
         player.stop()
+
+
+def test_status_does_not_consume_requests_unless_asked(tmp_path: Path) -> None:
+    player = MpvPlayer("mpv", [tmp_path], [])
+    player._handle_event({"event": "client-message", "args": ["dabox", "channel-down"]})
+    client = TestClient(create_agent_app(player))
+    assert client.get("/status").json()["requests"] == ["channel-down"]
+    assert client.get("/status", params={"consume_requests": True}).json()["requests"] == ["channel-down"]
+    assert client.get("/status").json()["requests"] == []
+
+
+def test_game_start_checks_paths_core_and_save_key(tmp_path: Path) -> None:
+    from dabox.agent.retroarch import RetroArchRunner, save_override
+
+    media = tmp_path / "media"
+    cores = tmp_path / "cores"
+    rom = media / "game.nes"
+    core = cores / "nestopia_libretro.so"
+    for path in (rom, core):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"x")
+    runner = RetroArchRunner("retroarch", None, [cores], tmp_path / "saves", [media])
+    client = TestClient(create_agent_app(MpvPlayer("mpv", [media], []), runner))
+
+    bad_core = client.post("/play-game", json={"path": str(rom), "core": "/etc/passwd", "save_key": "abcdef12", "title": "x"})
+    bad_key = client.post("/play-game", json={"path": str(rom), "core": str(core), "save_key": "../../x", "title": "x"})
+    bad_rom = client.post("/play-game", json={"path": "/etc/hosts", "core": str(core), "save_key": "abcdef12", "title": "x"})
+    assert [bad_core.status_code, bad_key.status_code, bad_rom.status_code] == [403, 403, 403]
+    assert 'savestate_directory = "/s/k"' in save_override(Path("/s/k"))
+
+
+def test_core_links_in_the_core_folder_are_allowed(tmp_path: Path) -> None:
+    from dabox.agent.retroarch import check_core
+
+    real = tmp_path / "usr" / "nestopia_libretro.so"
+    real.parent.mkdir()
+    real.write_bytes(b"x")
+    cores = tmp_path / "cores"
+    cores.mkdir()
+    (cores / "nestopia_libretro.so").symlink_to(real)
+
+    assert check_core(str(cores / "nestopia_libretro.so"), [cores]) == cores / "nestopia_libretro.so"
+    for bad in (str(real), str(cores / ".." / "usr" / "nestopia_libretro.so")):
+        with pytest.raises(PathNotAllowed):
+            check_core(bad, [cores])

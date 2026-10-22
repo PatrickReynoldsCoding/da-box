@@ -6,6 +6,8 @@ from fastapi.testclient import TestClient
 from dabox.app import build_services, create_app
 from dabox.config import ServiceConfig
 from dabox.services import Services
+from dabox.limits import PlayerSnapshot
+from dabox.limits_service import FakePower
 from dabox.metadata import HttpError
 from dabox.system import FakeNetwork, FakeTimezone
 from dabox.usb import FakeUsb
@@ -16,6 +18,29 @@ TEST_PIN = "2468"
 
 
 JPEG_BYTES = b"\xff\xd8\xff fake jpeg"
+
+
+class FakeAgent:
+    """Stands in for the player agent: what is playing, and what the service asked it to do."""
+
+    def __init__(self) -> None:
+        self.state = "idle"
+        self.kind: str | None = None
+        self.stopped = 0
+        self.messages: list[str] = []
+
+    def play(self, kind: str) -> None:
+        self.state, self.kind = "playing", kind
+
+    def status(self) -> PlayerSnapshot:
+        return PlayerSnapshot(state=self.state, kind=self.kind)
+
+    def stop(self) -> None:
+        self.stopped += 1
+        self.state, self.kind = "idle", None
+
+    def notify(self, message: str) -> None:
+        self.messages.append(message)
 
 
 class FakeHttp:
@@ -98,9 +123,26 @@ def fake_http() -> FakeHttp:
 
 
 @pytest.fixture
-def services(tmp_path: Path, media_dir: Path, timezone_backend: FakeTimezone, usb_root: Path, fake_http: FakeHttp) -> Services:
-    config = ServiceConfig(media_dir=media_dir, data_dir=tmp_path / "data", host="127.0.0.1", port=80, dev_mode=True)
-    return build_services(config, FakeNetwork(), timezone_backend, FakeUsb(usb_root), fake_http)
+def fake_agent() -> FakeAgent:
+    return FakeAgent()
+
+
+@pytest.fixture
+def fake_power() -> FakePower:
+    return FakePower()
+
+
+@pytest.fixture
+def services(
+    tmp_path: Path, media_dir: Path, timezone_backend: FakeTimezone, usb_root: Path, fake_http: FakeHttp,
+    fake_agent: FakeAgent, fake_power: FakePower,
+) -> Services:
+    config = ServiceConfig(
+        media_dir=media_dir, data_dir=tmp_path / "data", host="127.0.0.1", port=80, dev_mode=True,
+        core_dirs=(tmp_path / "cores",),
+    )
+    write_file(tmp_path / "cores" / "nestopia_libretro.so", b"core")
+    return build_services(config, FakeNetwork(), timezone_backend, FakeUsb(usb_root), fake_http, fake_agent, fake_power)
 
 
 @pytest.fixture

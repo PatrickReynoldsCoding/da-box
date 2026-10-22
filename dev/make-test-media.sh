@@ -56,4 +56,15 @@ make_episode "Shape Friends" 1 1 "Circles" "testsrc2=size=960x540:rate=25" 180
 make_episode "Shape Friends" 1 2 "Squares" "smptebars=size=960x540:rate=25" 240
 make_episode "Shape Friends" 1 3 "Triangles" "rgbtestsrc=size=960x540:rate=25" 150
 make_episode "Shape Friends" 2 1 "Spirals" "mandelbrot=size=960x540:rate=25" 200
+# Test games: the 240p Test Suite by Damian Yerrick (zlib licence, free to share).
+download_game() {
+  local system="$1" name="$2" url="$3"
+  local file="$target/Games/$system/$name"
+  [[ -f "$file" ]] && return
+  mkdir -p "$target/Games/$system"
+  curl -sSfL -o "$file" "$url" || { rm -f "$file"; echo "Could not download $name (no internet?)"; }
+}
+download_game nes "240p Test Suite.nes" "https://github.com/pinobatch/240p-test-mini/releases/download/v0.23/240pee.nes"
+download_game gb "240p Test Suite.gb" "https://github.com/pinobatch/240p-test-mini/releases/download/v0.23/gb240p.gb"
+download_game gba "240p Test Suite.gba" "https://github.com/pinobatch/240p-test-mini/releases/download/v0.23/240pee_mb.gba"
 echo "Done."

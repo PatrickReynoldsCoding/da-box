@@ -9,7 +9,7 @@ See [DESIGN.md](DESIGN.md) for the full design.
 | Folder | What it is |
 |---|---|
 | `service/` | Python (FastAPI) package `dabox`: box API for the UI (localhost only), admin API + web app (PIN), library scan, settings, setup. Also `dabox.agent`, the player agent that controls mpv. |
-| `ui/` | Godot 4 box UI (Home, Films, Music, first-run setup). Arrow keys + Enter + Esc, or a game controller. |
+| `ui/` | Godot 4 box UI (Home, TV guide, channels, Films, Music, Games, first-run setup, sleeping screen). Arrow keys + Enter + Esc, or a game controller. |
 | `install/` | `install.sh` for a Debian-based box (Raspberry Pi OS Lite, Debian 12/13, arm64 or x86_64), plus systemd, PAM, polkit and firewall files. |
 | `vm/` | `box-vm.sh`: a Debian arm64 VM on an Apple Silicon Mac (QEMU) that acts as the real box. |
 | `dev/` | `run-dev.sh` (run everything on the Mac) and `make-test-media.sh` (test films and music with ffmpeg). |
@@ -23,6 +23,21 @@ cage kiosk                     dabox-service :80
       │                         admin API + web app (/api/admin/*, PIN)  ◀── phone
       └─ HTTP ─▶ dabox-agent :8091 ─▶ mpv
 ```
+
+## Media folders
+
+```
+Films/<Title (Year)>/<file>.mp4   (+ poster.jpg, movie.nfo)
+TV/<Show>/Season 01/<Show> S01E01 - <Title>.mp4
+Music/<Artist>/<Album>/01 <Song>.mp3   (+ cover.jpg)
+Games/<system>/<Game>.nes          systems: nes snes gb gbc gba megadrive psx
+```
+
+The same layout works on a USB stick. Mega Drive and PlayStation need `install.sh --extra-cores`.
+
+## Limits
+
+The service enforces the limits, not the UI. It checks what the player agent is doing every 2 seconds, counts video and game time, warns at 5 and 1 minutes, saves and stops games at the end of the game window, and shuts the box down after the quota is used up (once a day) and at bedtime. A video starts only if it can end before the quota (plus the overrun allowance) and bedtime. The night lasts from bedtime until 06:00. Parent mode switches all limits off. Every action is logged: `journalctl -u dabox-service | grep "Limits at"`.
 
 ## Run it on the Mac (dev mode)
 
@@ -45,7 +60,9 @@ vm/box-vm.sh deploy       # copies the repo in and runs install/install.sh --vm 
 vm/box-vm.sh media        # copies dev/media into the box
 ```
 
-The QEMU window is the TV. Click it to give it the keyboard. The admin app is at http://localhost:8081, SSH is `vm/box-vm.sh ssh`. `vm/box-vm.sh keys ret` and `vm/box-vm.sh screenshot out.png` drive the VM from a script.
+The QEMU window is the TV. Click it to give it the keyboard. The admin app is at http://localhost:8081, SSH is `vm/box-vm.sh ssh`. `vm/box-vm.sh keys ret` and `vm/box-vm.sh screenshot out.png` drive the VM from a script, and `vm/box-vm.sh usb-in stick.img` / `usb-out` plug a disk image in and out as a USB stick.
+
+Do not reboot the VM from inside: QEMU's firmware can fail on a warm reboot. Use `vm/box-vm.sh stop`, then `start`.
 
 ## Tests
 

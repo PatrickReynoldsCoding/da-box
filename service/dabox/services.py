@@ -10,8 +10,9 @@ from dabox.box_state import BoxState
 from dabox.channels import Guide
 from dabox.durations import Durations
 from dabox.library import LibraryIndex
+from dabox.limits_service import LimitsService
 from dabox.metadata import MetadataService
-from dabox.models import Album, Film
+from dabox.models import Album, Film, Game
 from dabox.store import Store
 from dabox.system import NetworkBackend
 from dabox.usb import UsbBackend, UsbStick
@@ -31,6 +32,8 @@ class Services:
     metadata: MetadataService
     durations: Durations
     guide: Guide
+    limits: LimitsService
+    core_dirs: tuple[Path, ...]
     incoming_dir: Path
     admin_port: int
     # Set to wake the metadata and guide workers after the library changes.
@@ -42,7 +45,7 @@ class Services:
         self.metadata_wanted.set()
         self.guide_wanted.set()
 
-    def item_or_404(self, item_id: str) -> Film | Album:
+    def item_or_404(self, item_id: str) -> Film | Album | Game:
         item = self.library.find(item_id)
         if item is None:
             raise HTTPException(status_code=404, detail="No such item")

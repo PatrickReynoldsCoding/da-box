@@ -3,11 +3,14 @@ extends Node
 
 ## Emitted when the box state (setup needed, parent mode) changes.
 signal state_changed(state: Dictionary)
+## Emitted after each limits refresh (time left, games open, warnings, shut-down).
+signal limits_changed(limits: Dictionary)
 
 var service_url := "http://127.0.0.1:80"
 var agent_url := "http://127.0.0.1:8091"
 
 var state: Dictionary = {}
+var limits: Dictionary = {}
 var _texture_cache: Dictionary = {}
 
 
@@ -80,6 +83,42 @@ func refresh_state() -> bool:
 
 func parent_mode() -> bool:
 	return state.get("parent_mode", false)
+
+
+func refresh_limits() -> void:
+	var reply := await service_get("/box/limits")
+	if reply.ok:
+		limits = reply.data
+		limits_changed.emit(limits)
+
+
+## Seconds of box-local wall-clock time, for comparing times from the service.
+static func wall_seconds(iso_time: Variant) -> float:
+	return Time.get_unix_time_from_datetime_string(iso_time) if iso_time is String else 0.0
+
+
+## True if a video of this length can still start now (rule c).
+func video_fits(seconds: float) -> bool:
+	if limits.get("unlimited", true):
+		return true
+	if limits.get("video_locked", false) or limits.get("video_deadline") == null:
+		return false
+	return wall_seconds(limits["now"]) + seconds <= wall_seconds(limits["video_deadline"])
+
+
+## Asks the service before a video starts. Returns "" if allowed, else the reason.
+func approve_video(seconds: float) -> String:
+	var reply := await service_post("/box/limits/video", {"seconds": maxf(seconds, 1.0)})
+	if not reply.ok:
+		return "The box could not check the time left."
+	return "" if reply.data["allowed"] else String(reply.data["reason"])
+
+
+static func minutes_text(seconds: float) -> String:
+	var minutes := int(ceil(seconds / 60.0))
+	if minutes >= 60:
+		return "%d h %d min" % [minutes / 60, minutes % 60] if minutes % 60 else "%d h" % (minutes / 60)
+	return "%d min" % minutes
 
 
 func _request(url: String, method: HTTPClient.Method, body: Variant) -> Reply:

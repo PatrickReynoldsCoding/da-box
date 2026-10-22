@@ -9,7 +9,7 @@ var _art: TextureRect
 var _placeholder: Control
 
 
-func _init(title: String, subtitle: String, art_path: String, colour: Color, square: bool = false, badge: String = "") -> void:
+func _init(title: String, subtitle: String, art_path: String, colour: Color, square: bool = false, badge: String = "", placeholder: Icon.Kind = Icon.Kind.FILM) -> void:
 	var art_size := SQUARE_SIZE if square else POSTER_SIZE
 	custom_minimum_size = art_size + Vector2(0, 110)
 	focus_mode = Control.FOCUS_ALL
@@ -30,7 +30,7 @@ func _init(title: String, subtitle: String, art_path: String, colour: Color, squ
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(frame)
 
-	_placeholder = Icon.new(Icon.Kind.MUSIC if square else Icon.Kind.FILM, Color(1, 1, 1, 0.6), 160)
+	_placeholder = Icon.new(Icon.Kind.MUSIC if square and placeholder == Icon.Kind.FILM else placeholder, Color(1, 1, 1, 0.6), 160)
 	_placeholder.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	frame.add_child(_placeholder)
 
@@ -77,6 +77,11 @@ static func badge_text(item: Dictionary) -> String:
 	if item.get("hidden", false):
 		parts.append("Hidden")
 	return " · ".join(parts)
+
+
+## Greyed out: still focusable (so the child can see why), but faded.
+func set_unavailable(unavailable: bool) -> void:
+	modulate = Color(1, 1, 1, 0.35) if unavailable else Color.WHITE
 
 
 func _load_art(art_path: String) -> void:

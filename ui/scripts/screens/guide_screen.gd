@@ -140,6 +140,9 @@ func _add_row(channel: Dictionary, row: int, now_unix: float) -> void:
 		var on_now := start <= now_unix and now_unix < end
 		var past := end <= now_unix
 		var fill := colour.darkened(0.15) if on_now else (Color(1, 1, 1, 0.05) if past else colour.darkened(0.55))
+		# Video programmes that cannot finish in the time left today are faded (rule c).
+		if channel["kind"] == "video" and not past and not Api.video_fits(end - maxf(start, now_unix)):
+			button.modulate = Color(1, 1, 1, 0.35)
 		button.add_theme_stylebox_override("normal", UiTheme.rounded_box(fill, 16, 12))
 		button.position = Vector2(_x_for(start) + 2, _row_y(row))
 		button.size = Vector2(maxf((end - start) / 60.0 * PIXELS_PER_MINUTE - 4, 20), ROW_HEIGHT)

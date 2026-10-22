@@ -7,6 +7,7 @@ const STATE_POLL_SECONDS := 3.0
 var _stack: Array[Screen] = []
 var _layer: Control
 var _parent_badge: Label
+var _warning: Label
 
 
 func _ready() -> void:
@@ -19,6 +20,9 @@ func _ready() -> void:
 	add_child(_layer)
 	_parent_badge = _make_parent_badge()
 	add_child(_parent_badge)
+	_warning = _make_warning()
+	add_child(_warning)
+	Api.limits_changed.connect(_on_limits_changed)
 
 	Api.state_changed.connect(_on_state_changed)
 	var timer := Timer.new()
@@ -39,6 +43,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _poll_state() -> void:
 	var reachable := await Api.refresh_state()
+	if reachable and not Api.state.get("setup_required", true):
+		await Api.refresh_limits()
 	if not reachable and not (_top() is ConnectingScreen):
 		_replace_all(ConnectingScreen.new())
 	elif reachable and _top() is ConnectingScreen:
@@ -54,6 +60,29 @@ func _on_state_changed(state: Dictionary) -> void:
 	# The admin app can ask for the setup again. A finished setup moves on by itself.
 	if setup_required and not in_setup:
 		_show_for_state(state)
+
+
+func _on_limits_changed(limits: Dictionary) -> void:
+	var warning: Variant = limits.get("warning")
+	_warning.visible = warning is String
+	_warning.text = warning if warning is String else ""
+	var shutting_down: bool = limits.get("shutdown_at") != null
+	if shutting_down and not (_top() is SleepingScreen):
+		_replace_all(SleepingScreen.new())
+	elif not shutting_down and _top() is SleepingScreen:
+		# The parent gave extra time.
+		_replace_all(HomeScreen.new())
+
+
+func _make_warning() -> Label:
+	var label := Label.new()
+	label.add_theme_font_size_override("font_size", 40)
+	label.add_theme_color_override("font_color", UiTheme.BACKGROUND_TOP)
+	label.add_theme_stylebox_override("normal", UiTheme.rounded_box(UiTheme.WARNING, 24, 20))
+	label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP, Control.PRESET_MODE_MINSIZE, 24)
+	label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	label.visible = false
+	return label
 
 
 func _show_for_state(state: Dictionary) -> void:

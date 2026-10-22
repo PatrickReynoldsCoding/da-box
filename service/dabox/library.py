@@ -6,13 +6,15 @@ from pathlib import Path
 
 import mutagen
 
-from dabox.models import Album, Episode, Film, Library, MediaSource, Show, Track
+from dabox.models import Album, Episode, Film, Game, Library, MediaSource, Show, Track
+from dabox.systems import SYSTEMS
 from dabox.nfo import find_movie_nfo
 from dabox.usb import UsbStick
 
 FILMS_FOLDER = "Films"
 MUSIC_FOLDER = "Music"
 TV_FOLDER = "TV"
+GAMES_FOLDER = "Games"
 
 VIDEO_EXTENSIONS = frozenset({".mkv", ".mp4", ".m4v", ".avi", ".mov", ".webm", ".ts"})
 AUDIO_EXTENSIONS = frozenset({".mp3", ".flac", ".ogg", ".opus", ".m4a", ".wav"})
@@ -23,6 +25,8 @@ _TRACK_NUMBER_PATTERN = re.compile(r"^\s*(\d+)")
 _LEADING_TRACK_NUMBER_PATTERN = re.compile(r"^\d+[\s._-]+")
 _EPISODE_PATTERN = re.compile(r"[Ss](?P<season>\d{1,2})[Ee](?P<episode>\d{1,3})")
 _SEASON_FOLDER_PATTERN = re.compile(r"(?i)^season\s*(?P<season>\d+)$")
+_GAME_TAGS_PATTERN = re.compile(r"\s*[\(\[][^\)\]]*[\)\]]")
+_GAME_ART_EXTENSIONS = (".png", ".jpg")
 _FINGERPRINT_CHUNK = 64 * 1024
 
 UNKNOWN_ARTIST = "Unknown artist"
@@ -265,6 +269,39 @@ def scan_shows(media_dir: Path) -> list[Show]:
     return shows
 
 
+def game_title(stem: str) -> str:
+    """'Super Game (USA) (Rev 1) [!]' -> 'Super Game'."""
+    return _GAME_TAGS_PATTERN.sub("", stem).replace("_", " ").strip() or stem
+
+
+def scan_games(namer: ItemNamer) -> list[Game]:
+    games_dir = namer.root / GAMES_FOLDER
+    if not games_dir.is_dir():
+        return []
+    games: list[Game] = []
+    for system_folder in _visible_entries(games_dir):
+        system = SYSTEMS.get(system_folder.name.lower())
+        if system is None or not system_folder.is_dir():
+            continue
+        for path in sorted(system_folder.rglob("*")):
+            if path.name.startswith(".") or path.suffix.lower() not in system.extensions:
+                continue
+            fingerprint = cached_fingerprint(path)
+            art = next((path.with_suffix(extension) for extension in _GAME_ART_EXTENSIONS if path.with_suffix(extension).is_file()), None)
+            games.append(Game(
+                id=namer.file_id("game", path, fingerprint),
+                title=game_title(path.stem),
+                file_stem=path.stem,
+                system=system.key,
+                path=path,
+                art_path=art,
+                fingerprint=fingerprint,
+                source=namer.source,
+                stick_label=namer.stick_label,
+            ))
+    return games
+
+
 def _track_sort_key(track: Track) -> tuple[int, str]:
     # Tracks without a number go after the numbered ones.
     return (track.track_number if track.track_number is not None else 10_000, track.path.name.lower())
@@ -331,18 +368,31 @@ def albums_not_on_box(usb_albums: list[Album], box_albums: list[Album]) -> list[
     return unique
 
 
+def games_not_on_box(usb_games: list[Game], box_games: list[Game]) -> list[Game]:
+    seen = {game.fingerprint for game in box_games}
+    unique: list[Game] = []
+    for game in usb_games:
+        if game.fingerprint not in seen:
+            seen.add(game.fingerprint)
+            unique.append(game)
+    return unique
+
+
 def scan_library(media_dir: Path, sticks: list[UsbStick]) -> Library:
     box_namer = ItemNamer(media_dir, None)
     films = scan_films(box_namer)
     albums = scan_music(box_namer)
+    games = scan_games(box_namer)
     for stick in sticks:
         stick_namer = ItemNamer(stick.path, stick)
         films += films_not_on_box(scan_films(stick_namer), films)
         albums += albums_not_on_box(scan_music(stick_namer), albums)
+        games += games_not_on_box(scan_games(stick_namer), games)
     return Library(
         films=sorted(films, key=lambda film: film.title.lower()),
         albums=sorted(albums, key=lambda album: (album.artist.lower(), album.title.lower())),
         shows=scan_shows(media_dir),
+        games=sorted(games, key=lambda game: (game.title.lower(), game.system)),
         sticks=sticks,
     )
 
@@ -353,7 +403,7 @@ class LibraryIndex:
     def __init__(self, media_dir: Path) -> None:
         self._media_dir = media_dir
         self._lock = threading.Lock()
-        self._library = Library(films=[], albums=[], shows=[], sticks=[])
+        self._library = Library(films=[], albums=[], shows=[], games=[], sticks=[])
 
     @property
     def media_dir(self) -> Path:
@@ -369,9 +419,9 @@ class LibraryIndex:
             self._library = scan_library(self._media_dir, current_sticks)
             return self._library
 
-    def find(self, item_id: str) -> Film | Album | None:
+    def find(self, item_id: str) -> Film | Album | Game | None:
         library = self._library
-        for item in [*library.films, *library.albums]:
+        for item in [*library.films, *library.albums, *library.games]:
             if item.id == item_id:
                 return item
         return None

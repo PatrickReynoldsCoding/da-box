@@ -68,7 +68,10 @@ class _Listing:
 def films(services: Services = Depends(get_services)) -> list[FilmView]:
     listing = _Listing(services)
     visible = visible_films(services.library.library, listing.hidden_ids, listing.show_hidden, listing.usb_allowed)
-    return [film_view(film, listing.hidden_ids, listing.metadata.get(film.id), ART_PREFIX) for film in visible]
+    return [
+        film_view(film, listing.hidden_ids, listing.metadata.get(film.id), ART_PREFIX, services.durations.get(film.fingerprint))
+        for film in visible
+    ]
 
 
 @router.get("/music/albums")

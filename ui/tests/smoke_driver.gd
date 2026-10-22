@@ -112,7 +112,12 @@ func _run_tv() -> void:
 	for i in 3:
 		await _press("ui_cancel")
 	await _wait(0.5)
-	get_tree().root.find_child("TVTile", true, false).grab_focus()
+	var tv_tile := get_tree().root.find_child("TVTile", true, false) as Control
+	if tv_tile == null:
+		# At night the sleeping screen replaces Home.
+		print("TV part skipped: no Home screen (night or quota used up?)")
+		return
+	tv_tile.grab_focus()
 	await _press("ui_accept")
 	await _wait(2.5)
 	await _shot("tv-guide")

@@ -121,8 +121,22 @@ class Show(BaseModel):
     episodes: list[Episode]
 
 
+class Game(BaseModel):
+    id: str
+    title: str
+    # The file name without its extension. Art sites use this full name.
+    file_stem: str
+    system: str
+    path: Path
+    art_path: Path | None
+    fingerprint: str
+    source: MediaSource
+    stick_label: str | None
+
+
 class Library(BaseModel):
     films: list[Film]
     albums: list[Album]
     shows: list[Show]
+    games: list[Game]
     sticks: list[UsbStick]

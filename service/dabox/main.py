@@ -1,3 +1,5 @@
+import logging
+
 import uvicorn
 
 from dabox.app import create_app, default_services
@@ -5,6 +7,7 @@ from dabox.config import load_service_config
 
 
 def run_service() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     config = load_service_config()
     config.media_dir.mkdir(parents=True, exist_ok=True)
     app = create_app(default_services(config))

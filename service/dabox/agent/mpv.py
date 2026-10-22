@@ -24,6 +24,14 @@ class MediaKind(StrEnum):
     AUDIO = "audio"
 
 
+class PlayerKind(StrEnum):
+    """What the agent is playing, as the UI and the service see it."""
+
+    VIDEO = "video"
+    AUDIO = "audio"
+    GAME = "game"
+
+
 class PlayerState(StrEnum):
     IDLE = "idle"
     PLAYING = "playing"
@@ -52,7 +60,7 @@ class PlayItem(BaseModel):
 
 class PlayerStatus(BaseModel):
     state: PlayerState
-    kind: MediaKind | None
+    kind: PlayerKind | None
     title: str | None
     artist: str | None
     index: int | None
@@ -174,8 +182,17 @@ class MpvPlayer:
             requests, self._requests = self._requests, []
         return requests
 
-    def status(self) -> PlayerStatus:
-        requests = self.take_requests()
+    def notify(self, message: str) -> None:
+        if self._is_running():
+            self._command(["show-text", message, 6000])
+
+    def status(self, consume_requests: bool = False) -> PlayerStatus:
+        """Only the box UI should consume the key presses. The service only looks."""
+        if consume_requests:
+            requests = self.take_requests()
+        else:
+            with self._lock:
+                requests = list(self._requests)
         if not self._is_running():
             return PlayerStatus(
                 state=PlayerState.IDLE, kind=None, title=None, artist=None, index=None, count=0,
@@ -185,7 +202,7 @@ class MpvPlayer:
         item = self._items[index] if isinstance(index, int) and 0 <= index < len(self._items) else None
         return PlayerStatus(
             state=PlayerState.PAUSED if self._property("pause") else PlayerState.PLAYING,
-            kind=self._kind,
+            kind=PlayerKind(self._kind.value) if self._kind else None,
             title=item.title if item else None,
             artist=item.artist if item else None,
             index=index if isinstance(index, int) else None,

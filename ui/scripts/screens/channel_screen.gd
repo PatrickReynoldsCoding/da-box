@@ -108,6 +108,15 @@ func _tune() -> void:
 		return
 	_show_text(slot["title"], slot["subtitle"] if slot["subtitle"] is String else "", slot["art_url"] if slot["art_url"] is String else "")
 	var kind := "audio" if _now["kind"] == "music" else "video"
+	if kind == "video":
+		var remaining := Api.wall_seconds(slot["end"]) - Api.wall_seconds(_now["now"])
+		var refusal := await Api.approve_video(remaining)
+		if not refusal.is_empty():
+			await Api.agent_post("/control", {"action": "stop"})
+			_subtitle.text = refusal
+			_next_check = Time.get_ticks_msec() / 1000.0 + NOTHING_ON_POLL_SECONDS
+			_now["slot"] = null
+			return
 	var play := await Api.agent_post("/play", {
 		"kind": kind,
 		"mode": "channel",
@@ -154,7 +163,7 @@ func _poll() -> void:
 		if _now.get("slot") == null and now >= _next_check:
 			_tune()
 		return
-	var reply := await Api.agent_get("/status")
+	var reply := await Api.agent_get("/status?consume_requests=true")
 	if not reply.ok or not _playing:
 		return
 	var status: Dictionary = reply.data

@@ -99,8 +99,30 @@ function renderParentMode(enabled) {
   $("#parent-mode-label").textContent = enabled ? "On" : "Off";
 }
 
+function renderToday(today) {
+  if (today.unlimited) {
+    $("#today-summary").textContent = "No limits right now (parent mode, or setup not done).";
+    $("#today-games").textContent = "";
+    $("#today-shutdown").textContent = "";
+    return;
+  }
+  const left = Math.ceil((today.video_seconds_left ?? 0) / 60);
+  $("#today-summary").textContent = `TV time used: ${today.used_minutes} of ${today.quota_minutes} min (${left} min left).${today.video_locked ? ` ${today.video_locked_reason}` : ""}`;
+  $("#today-games").textContent = `Games: ${today.games_message}. Bedtime: ${today.bedtime ? today.bedtime.slice(11, 16) : "–"}.`;
+  $("#today-shutdown").textContent = today.shutdown_at ? `The box turns off at ${today.shutdown_at.slice(11, 19)}. Extra time stops this.` : "";
+}
+
+for (const button of document.querySelectorAll("[data-extra-quota], [data-extra-games]")) {
+  button.addEventListener("click", async () => {
+    const body = { quota_minutes: Number(button.dataset.extraQuota ?? 0), game_minutes: Number(button.dataset.extraGames ?? 0) };
+    renderToday(await api("/extra-time", { method: "POST", body }));
+    setMessage($("#extra-message"), `Added: ${button.textContent.replace("+", "")} for today.`, "ok");
+  });
+}
+
 async function loadHome() {
-  const [status, sticks] = await Promise.all([api("/status"), api("/usb")]);
+  const [status, sticks, today] = await Promise.all([api("/status"), api("/usb"), api("/today")]);
+  renderToday(today);
   renderParentMode(status.parent_mode);
   $("#library-summary").textContent = `${status.film_count} films, ${status.album_count} albums. Time zone: ${status.timezone ?? "not set"}.`;
   const rows = sticks.map((stick) => {
@@ -187,7 +209,11 @@ function renderContent(content) {
 }
 
 async function loadContent() {
-  renderContent(await api("/content"));
+  const [content, games] = await Promise.all([api("/content"), api("/games")]);
+  renderContent(content);
+  const gameList = $("#game-list");
+  gameList.replaceChildren(...games.map((game) => itemRow(game, game.system_name, "album-art", "game")));
+  gameList.classList.toggle("empty", games.length === 0);
 }
 
 $("#rescan").addEventListener("click", async () => {
@@ -348,6 +374,7 @@ function itemMessage(text, kind) {
 function renderItem(item) {
   document.body.classList.toggle("is-film", item.kind === "film");
   document.body.classList.toggle("is-album", item.kind === "album");
+  document.body.classList.toggle("is-game", item.kind === "game");
   const art = $("#item-art");
   art.src = item.art_url ? `${item.art_url}?v=${Date.now()}` : "";
   art.style.visibility = item.art_url ? "visible" : "hidden";

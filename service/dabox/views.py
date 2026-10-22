@@ -13,6 +13,8 @@ class FilmView(BaseModel):
     title: str
     year: int | None
     plot: str | None
+    # Length in seconds, if known. The UI uses it to grey out films that cannot finish today.
+    seconds: float | None
     art_url: str | None
     path: str
     hidden: bool
@@ -50,12 +52,13 @@ def _art_url(item: Film | Album, metadata: Metadata | None, art_prefix: str) -> 
     return f"{art_prefix}/{item.id}" if has_art else None
 
 
-def film_view(film: Film, hidden_ids: set[str], metadata: Metadata | None, art_prefix: str) -> FilmView:
+def film_view(film: Film, hidden_ids: set[str], metadata: Metadata | None, art_prefix: str, seconds: float | None = None) -> FilmView:
     return FilmView(
         id=film.id,
         title=(metadata.title if metadata and metadata.title else film.title),
         year=(metadata.year if metadata and metadata.year else film.year),
         plot=(metadata.plot if metadata and metadata.plot else film.plot),
+        seconds=seconds or None,
         art_url=_art_url(film, metadata, art_prefix),
         path=str(film.path),
         hidden=film.id in hidden_ids,

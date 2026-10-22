@@ -14,6 +14,9 @@ class ServiceConfig:
     dev_mode: bool
     # Dev mode only: every folder in here counts as a mounted USB stick.
     fake_usb_dir: Path | None = None
+    agent_url: str = "http://127.0.0.1:8091"
+    # Where libretro cores live. Games for systems without a core are not shown.
+    core_dirs: tuple[Path, ...] = ()
 
 
 def load_service_config() -> ServiceConfig:
@@ -24,4 +27,6 @@ def load_service_config() -> ServiceConfig:
         port=int(os.environ.get("DABOX_PORT", "80")),
         dev_mode=os.environ.get("DABOX_DEV") == "1",
         fake_usb_dir=Path(os.environ["DABOX_FAKE_USB_DIR"]) if os.environ.get("DABOX_FAKE_USB_DIR") else None,
+        agent_url=os.environ.get("DABOX_AGENT_URL", "http://127.0.0.1:8091"),
+        core_dirs=tuple(Path(folder) for folder in os.environ.get("DABOX_CORE_DIRS", "").split(":") if folder),
     )

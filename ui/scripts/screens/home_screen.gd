@@ -2,8 +2,10 @@ class_name HomeScreen
 extends Screen
 ## The four big tiles. TV and Games come in later build phases.
 
+var _tv_tile: BigTile
 var _films_tile: BigTile
 var _music_tile: BigTile
+var _games_tile: BigTile
 var _clock: Label
 var _leave_parent_mode: Button
 
@@ -26,14 +28,15 @@ func _ready() -> void:
 	tiles.alignment = BoxContainer.ALIGNMENT_CENTER
 	tiles.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	tiles.add_theme_constant_override("separation", 48)
-	var tv_tile := BigTile.new("TV", Icon.Kind.TV, UiTheme.TV)
-	tv_tile.pressed.connect(func() -> void: open_screen.emit(GuideScreen.new()))
+	_tv_tile = BigTile.new("TV", Icon.Kind.TV, UiTheme.TV)
+	_tv_tile.pressed.connect(func() -> void: open_screen.emit(GuideScreen.new()))
 	_films_tile = BigTile.new("Films", Icon.Kind.FILM, UiTheme.FILMS)
 	_music_tile = BigTile.new("Music", Icon.Kind.MUSIC, UiTheme.MUSIC)
-	var games_tile := _coming_soon(BigTile.new("Games", Icon.Kind.GAME, UiTheme.GAMES, "Coming soon"))
+	_games_tile = BigTile.new("Games", Icon.Kind.GAME, UiTheme.GAMES)
 	_films_tile.pressed.connect(func() -> void: open_screen.emit(FilmsScreen.new()))
 	_music_tile.pressed.connect(func() -> void: open_screen.emit(MusicScreen.new()))
-	for tile in [tv_tile, _films_tile, _music_tile, games_tile]:
+	_games_tile.pressed.connect(func() -> void: open_screen.emit(GamesScreen.new()))
+	for tile in [_tv_tile, _films_tile, _music_tile, _games_tile]:
 		tile.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		tiles.add_child(tile)
 	column.add_child(tiles)
@@ -47,6 +50,8 @@ func _ready() -> void:
 	page_margin(column)
 	Api.state_changed.connect(_on_state_changed)
 	_on_state_changed(Api.state)
+	Api.limits_changed.connect(_on_limits_changed)
+	_on_limits_changed(Api.limits)
 	_tick_clock()
 	var timer := Timer.new()
 	timer.wait_time = 1.0
@@ -67,10 +72,15 @@ func on_shown() -> void:
 	_refresh_music_subtitle()
 
 
-func _coming_soon(tile: BigTile) -> BigTile:
-	tile.disabled = true
-	tile.focus_mode = Control.FOCUS_NONE
-	return tile
+func _on_limits_changed(limits: Dictionary) -> void:
+	if limits.is_empty() or limits.get("unlimited", false):
+		for tile in [_tv_tile, _films_tile, _games_tile]:
+			tile.set_subtitle("")
+		return
+	var video_text := "Sleeping" if limits["video_locked"] else "%s left" % Api.minutes_text(limits["video_seconds_left"])
+	_tv_tile.set_subtitle(video_text)
+	_films_tile.set_subtitle(video_text)
+	_games_tile.set_subtitle(limits["games_message"])
 
 
 func _on_state_changed(state: Dictionary) -> void:
