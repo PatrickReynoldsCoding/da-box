@@ -1,0 +1,5 @@
+# Scripts and config files run on Linux: always LF, also in Windows checkouts.
+* text=auto eol=lf
+*.png binary
+*.ttf binary
+*.wav binary

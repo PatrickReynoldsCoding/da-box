@@ -10,8 +10,8 @@ See [DESIGN.md](DESIGN.md) for the full design.
 |---|---|
 | `service/` | Python (FastAPI) package `dabox`: box API for the UI (localhost only), admin API + web app (PIN), library scan, settings, setup. Also `dabox.agent`, the player agent that controls mpv. |
 | `ui/` | Godot 4 box UI (Home, TV guide, channels, Films, Music, Games, first-run setup, sleeping screen). Arrow keys + Enter + Esc, or a game controller. |
-| `install/` | `install.sh` for a Debian-based box (Raspberry Pi OS Lite, Debian 12/13, arm64 or x86_64), plus systemd, PAM, polkit and firewall files. |
-| `vm/` | `box-vm.sh`: a Debian arm64 VM on an Apple Silicon Mac (QEMU) that acts as the real box. |
+| `install/` | `install.sh` for an apt-based box (Raspberry Pi OS, Debian 12+, Ubuntu 22.04+, Linux Mint 21+; arm64 or x86_64), `uninstall.sh`, plus systemd, PAM, polkit and firewall files. |
+| `vm/` | `box-vm.sh`: a QEMU VM (Mac, Windows or Linux host) that acts as the real box, and a desktop VM like Linux Mint. |
 | `dev/` | `run-dev.sh` (run everything on the Mac) and `make-test-media.sh` (test films and music with ffmpeg). |
 
 ## How it fits together
@@ -56,7 +56,13 @@ Dev mode uses a fake network and does not change the Mac's time zone.
 
 ## Run it in the VM (the real box)
 
-Needs Homebrew `qemu`.
+Needs QEMU:
+
+| Host | Install | VM |
+|---|---|---|
+| Apple Silicon Mac | `brew install qemu` | Debian 13 arm64 (HVF) |
+| Windows | `scoop install qemu`, and turn on **Windows Hypervisor Platform** in "Turn Windows features on or off". Run the script from Git Bash. | Debian 13 x86_64 (WHPX) |
+| Linux | `apt install qemu-system-x86` | Debian 13 x86_64 (KVM) |
 
 ```sh
 vm/box-vm.sh start        # first time: downloads Debian and creates the VM
@@ -64,9 +70,11 @@ vm/box-vm.sh deploy       # copies the repo in and runs install/install.sh --vm 
 vm/box-vm.sh media        # copies dev/media into the box
 ```
 
-The QEMU window is the TV. Click it to give it the keyboard. The admin app is at http://localhost:8081, SSH is `vm/box-vm.sh ssh`. `vm/box-vm.sh keys ret` and `vm/box-vm.sh screenshot out.png` drive the VM from a script, and `vm/box-vm.sh usb-in stick.img` / `usb-out` plug a disk image in and out as a USB stick.
+The QEMU window is the TV. Click it to give it the keyboard. The admin app is at http://localhost:8081, SSH is `vm/box-vm.sh ssh`. `vm/box-vm.sh keys ret` and `vm/box-vm.sh screenshot out.png` drive the VM from a script, and `vm/box-vm.sh usb-in stick.img` / `usb-out` plug a disk image in and out as a USB stick. `vm/box-vm.sh save clean` / `restore clean` keep and go back to a disk snapshot (with the VM stopped).
 
-Do not reboot the VM from inside: QEMU's firmware can fail on a warm reboot. Use `vm/box-vm.sh stop`, then `start`.
+**Desktop VM.** `DABOX_VM=desktop vm/box-vm.sh start` (and `deploy`, `ssh`, ...) works on a second VM: Ubuntu 24.04 with a LightDM desktop, a boot splash and ufw, like Linux Mint 22. Use it to test installing over a desktop distro. Admin app on http://localhost:8082.
+
+Do not reboot the Mac VM from inside: QEMU's firmware can fail on a warm reboot. Use `vm/box-vm.sh stop`, then `start`.
 
 ## Tests
 
@@ -82,11 +90,19 @@ godot --path ui -- --service=http://127.0.0.1:8080 --agent=http://127.0.0.1:8091
 
 ## Install on a real box
 
-On a Raspberry Pi 5 with Raspberry Pi OS Lite (or any Debian-based machine), with internet access:
+On a Raspberry Pi 5 with Raspberry Pi OS Lite, or any apt-based Linux (Debian 12+, Ubuntu 22.04+, Linux Mint 21+, LMDE 6+), arm64 or x86_64, with internet access:
 
 ```sh
 git clone <this repo> && cd da-box
 sudo install/install.sh            # add --keep-ssh to keep SSH for maintenance
 ```
 
-The box restarts into the first-run setup on the TV. After the setup, open http://tvbox.local on a phone on the same Wi-Fi.
+The box shows the first-run setup on the TV. After the setup, open http://tvbox.local on a phone on the same Wi-Fi.
+
+**On a machine with a desktop** (Mint, Ubuntu, Raspberry Pi OS with desktop) the box takes the place of the desktop: the installer turns off the login screen (LightDM, GDM, ...) and ufw/firewalld, and asks you to restart at the end instead of starting the kiosk over the running desktop. Without a working GPU driver it uses software rendering. With an NVIDIA driver, if the screen stays black after the restart, run the installer again with `--vm`.
+
+To get the desktop back: `sudo install/uninstall.sh` (add `--purge` to also delete the code, media, settings and users), then restart.
+
+**If the screen is black and there is no SSH**: hold Shift (or press Esc on UEFI machines) while the machine starts, choose *Advanced options*, then a *recovery mode* entry, then *root*. Run `mount -o remount,rw /`, then `systemctl disable dabox-kiosk` and `reboot`. Back in the desktop, run `sudo install/uninstall.sh`.
+
+Other Linux families (Fedora, Arch, openSUSE) are not supported: the installer stops with a message before changing anything.
