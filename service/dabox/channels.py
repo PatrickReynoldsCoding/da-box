@@ -116,11 +116,20 @@ class Slot(BaseModel):
     edited: bool
 
 
+class ChannelShuffle(BaseModel):
+    """The parent's "Shuffle week" and "Shuffle day" presses, saved so that filling the week
+    again (after an edit or a channel change) gives the same order."""
+
+    week: str = ""
+    days: dict[date, str] = Field(default_factory=dict)
+
+
 class WeekSchedule(BaseModel):
     week_start: datetime
     slots: list[Slot]
     # Where each in-order channel's list started and ended this week.
     cursors: dict[str, dict[str, int]]
+    shuffles: dict[str, ChannelShuffle] = Field(default_factory=dict)
 
 
 class GuideError(Exception):
@@ -216,11 +225,15 @@ def generate_channel_week(
     zone: tzinfo,
     start_cursor: int,
     edited: list[Slot],
+    shuffle: ChannelShuffle | None = None,
 ) -> tuple[list[Slot], int]:
-    """Fills the channel's open hours for one week. Returns the new slots and the end cursor."""
+    """Fills the channel's open hours for one week. Returns the new slots and the end cursor.
+    A day with its own shuffle gets its own deck; the other days share the week's deck."""
     slots: list[Slot] = []
     cursor = start_cursor
-    deck = _ShuffleDeck(programmes, f"{channel.id}:{week_key(week_start)}")
+    shuffle = shuffle or ChannelShuffle()
+    week_seed = f"{channel.id}:{week_key(week_start)}" + (f":{shuffle.week}" if shuffle.week else "")
+    week_deck = _ShuffleDeck(programmes, week_seed)
     if not programmes:
         return slots, cursor
 
@@ -231,26 +244,46 @@ def generate_channel_week(
             continue
         window_start = datetime.combine(day, hours.start, tzinfo=zone)
         window_end = datetime.combine(day, hours.end, tzinfo=zone)
-        for interval_start, interval_end in free_intervals(window_start, window_end, edited):
-            moment = interval_start
-            while True:
-                seconds_left = (interval_end - moment).total_seconds()
-                if channel.order is PlayOrder.IN_ORDER:
-                    programme = programmes[cursor % len(programmes)]
-                    if programme.seconds > seconds_left:
-                        break
-                    cursor += 1
-                else:
-                    found = deck.take_fitting(seconds_left)
-                    if found is None:
-                        break
-                    programme = found
-                end = moment + timedelta(seconds=programme.seconds)
-                slots.append(Slot(
-                    id=slot_id(channel.id, moment), channel_id=channel.id, start=moment, end=end,
-                    programme=programme, edited=False,
-                ))
-                moment = end
+        intervals = free_intervals(window_start, window_end, edited)
+        day_start_cursor = cursor
+        day_slots, cursor = _fill_day(channel, programmes, intervals, week_deck, day_start_cursor)
+        day_seed = shuffle.days.get(day)
+        if day_seed:
+            # The week's deck still dealt this day above, so the days after it keep their order.
+            day_deck = _ShuffleDeck(programmes, f"{channel.id}:{day.isoformat()}:{day_seed}")
+            day_slots, _ = _fill_day(channel, programmes, intervals, day_deck, day_start_cursor)
+        slots += day_slots
+    return slots, cursor
+
+
+def _fill_day(
+    channel: Channel,
+    programmes: list[Programme],
+    intervals: list[tuple[datetime, datetime]],
+    deck: _ShuffleDeck,
+    cursor: int,
+) -> tuple[list[Slot], int]:
+    slots: list[Slot] = []
+    for interval_start, interval_end in intervals:
+        moment = interval_start
+        while True:
+            seconds_left = (interval_end - moment).total_seconds()
+            if channel.order is PlayOrder.IN_ORDER:
+                programme = programmes[cursor % len(programmes)]
+                if programme.seconds > seconds_left:
+                    break
+                cursor += 1
+            else:
+                found = deck.take_fitting(seconds_left)
+                if found is None:
+                    break
+                programme = found
+            end = moment + timedelta(seconds=programme.seconds)
+            slots.append(Slot(
+                id=slot_id(channel.id, moment), channel_id=channel.id, start=moment, end=end,
+                programme=programme, edited=False,
+            ))
+            moment = end
     return slots, cursor
 
 
@@ -346,19 +379,44 @@ class Guide:
             hidden_ids = self._store.hidden_item_ids()
             durations = self._durations.all()
 
+            old_shuffles = existing.shuffles if existing else {}
             slots: list[Slot] = []
             cursors: dict[str, dict[str, int]] = {}
+            shuffles: dict[str, ChannelShuffle] = {}
             for channel in self.channels():
                 edited = [slot for slot in (existing.slots if existing else []) if slot.channel_id == channel.id and slot.edited]
                 start_cursor = self._start_cursor(channel.id, existing, previous)
+                shuffle = old_shuffles.get(channel.id)
                 generated, end_cursor = generate_channel_week(
-                    channel, programmes_for(channel, library, durations, hidden_ids), week_start, zone, start_cursor, edited,
+                    channel, programmes_for(channel, library, durations, hidden_ids), week_start, zone, start_cursor, edited, shuffle,
                 )
                 slots += edited + generated
                 cursors[channel.id] = {"start": start_cursor, "end": end_cursor}
-            schedule = WeekSchedule(week_start=week_start, slots=sorted(slots, key=lambda slot: slot.start), cursors=cursors)
+                if shuffle is not None:
+                    shuffles[channel.id] = shuffle
+            schedule = WeekSchedule(
+                week_start=week_start, slots=sorted(slots, key=lambda slot: slot.start), cursors=cursors, shuffles=shuffles,
+            )
             self._save_week(schedule)
             return schedule
+
+    def shuffle(self, channel_id: str, day: date, whole_week: bool) -> WeekSchedule:
+        """Gives the channel a new random order for the week of `day`, or for `day` only.
+        Edited slots stay."""
+        if self.channel(channel_id).order is not PlayOrder.SHUFFLE:
+            raise GuideError("This channel plays in order, so it cannot be shuffled")
+        week_start = week_start_for(datetime.combine(day, time(0), tzinfo=self.zone()))
+        self.ensure_week(week_start)
+        with self._lock:
+            schedule = self.week(week_start)
+            if schedule is None:
+                raise GuideError("That week has no guide yet")
+            seed = secrets.token_hex(4)
+            current = schedule.shuffles.get(channel_id, ChannelShuffle())
+            updated = ChannelShuffle(week=seed) if whole_week else ChannelShuffle(week=current.week, days={**current.days, day: seed})
+            schedule.shuffles = {**schedule.shuffles, channel_id: updated}
+            self._save_week(schedule)
+        return self.generate(week_start)
 
     @staticmethod
     def _start_cursor(channel_id: str, existing: WeekSchedule | None, previous: WeekSchedule | None) -> int:

@@ -5,7 +5,17 @@ from datetime import date, datetime, time, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from dabox.channels import Channel, ChannelInput, ChannelKind, GuideError, PoolKind, Slot, programmes_for, slot_at
+from dabox.channels import (
+    Channel,
+    ChannelInput,
+    ChannelKind,
+    GuideError,
+    PoolKind,
+    Slot,
+    programmes_for,
+    slot_at,
+    week_start_for,
+)
 from dabox.channels import next_slot as find_next_slot
 from dabox.models import MediaSource, Weekday
 from dabox.services import Services, get_services, require_admin, require_box_client
@@ -47,6 +57,20 @@ class GuideDayView(BaseModel):
     channels: list[ChannelDayView]
     game_windows: list[TimeWindow]
     bedtime: datetime | None
+
+
+class GuideWeekView(BaseModel):
+    week_start: date
+    today: date
+    channel: Channel
+    days: list[date]
+    slots: list[SlotView]
+
+
+class ShuffleRequest(BaseModel):
+    channel_id: str
+    day: date
+    whole_week: bool
 
 
 class NowPlayingView(BaseModel):
@@ -263,10 +287,37 @@ def generate_guide(day: date | None = None, services: Services = Depends(get_ser
     return admin_guide(day, services)
 
 
+@admin_router.get("/guide/week")
+def admin_guide_week(channel_id: str, day: date | None = None, services: Services = Depends(get_services)) -> GuideWeekView:
+    """One channel's week (the week that contains `day`), for the admin app's table."""
+    guide = services.guide
+    try:
+        channel = guide.channel(channel_id)
+    except GuideError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    today = guide.now().date()
+    week_start = week_start_for(datetime.combine(day or today, time(0), tzinfo=guide.zone()))
+    guide.ensure_week(week_start)
+    slots = guide.slots_between(week_start, week_start + timedelta(days=7))
+    views = [slot_view(slot, "/api/admin/art") for slot in slots if slot.channel_id == channel.id]
+    days = [week_start.date() + timedelta(days=offset) for offset in range(7)]
+    return GuideWeekView(week_start=week_start.date(), today=today, channel=channel, days=days, slots=views)
+
+
+@admin_router.post("/guide/shuffle")
+def shuffle_guide(body: ShuffleRequest, services: Services = Depends(get_services)) -> None:
+    try:
+        services.guide.shuffle(body.channel_id, body.day, body.whole_week)
+    except GuideError as error:
+        raise _guide_error(error) from error
+
+
 @admin_router.post("/guide/slots")
 def place_slot(body: SlotPlacement, services: Services = Depends(get_services)) -> None:
+    # The admin app sends a clicked time without a zone: it is the box's local time.
+    start = body.start if body.start.tzinfo else body.start.replace(tzinfo=services.guide.zone())
     try:
-        services.guide.place(body.channel_id, body.start, body.ref, body.replace_slot_id)
+        services.guide.place(body.channel_id, start, body.ref, body.replace_slot_id)
     except GuideError as error:
         raise _guide_error(error) from error
 

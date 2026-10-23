@@ -665,91 +665,241 @@ $("#delete-channel").addEventListener("click", async () => {
 
 // ---- Guide ----
 
+// Pixels per minute: big enough that the shortest programme of the week can be read and
+// clicked (music tracks and short episodes), but a long film does not fill many screens.
+const SCALE_LIMITS = { smallest: 1.6, biggest: 12 };
+const SHORTEST_BLOCK_PX = 24;
+const ADD_STEP_MINUTES = 5;
+const MINUTES_PER_DAY = 24 * 60;
+
+let guideChannelId = null;
 let guideDay = null;
+let guideWeek = null;
 let editingSlot = null;
 let programmeChoices = [];
 
 const timeOf = (iso) => iso.slice(11, 16);
+const dayOf = (iso) => iso.slice(0, 10);
+const minutesOf = (clock) => Number(clock.slice(0, 2)) * 60 + Number(clock.slice(3, 5));
+const clockOf = (minutes) => `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+// A slot that ends at midnight ends at minute 1440 of its own day.
+const endMinutesOf = (slot) => (dayOf(slot.end) > dayOf(slot.start) ? MINUTES_PER_DAY : minutesOf(timeOf(slot.end)));
 
-function slotRow(slot, channel) {
-  const row = document.createElement("div");
-  row.className = `guide-slot${slot.title ? "" : " empty"}`;
+function addDays(day, count) {
+  const moment = new Date(`${day}T00:00:00Z`);
+  moment.setUTCDate(moment.getUTCDate() + count);
+  return moment.toISOString().slice(0, 10);
+}
+
+function dayLabel(day, options) {
+  return new Date(`${day}T00:00:00Z`).toLocaleDateString(undefined, { timeZone: "UTC", ...options });
+}
+
+function weekdayKey(day) {
+  return DAYS[(new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7][0];
+}
+
+/** The minutes after midnight that the table shows: the open hours and every slot, in whole hours. */
+function guideRange(week) {
+  let first = MINUTES_PER_DAY;
+  let last = 0;
+  for (const day of week.days) {
+    const hours = week.channel.hours[weekdayKey(day)];
+    if (hours) {
+      first = Math.min(first, minutesOf(hours.start));
+      last = Math.max(last, minutesOf(hours.end));
+    }
+  }
+  for (const slot of week.slots) {
+    first = Math.min(first, minutesOf(timeOf(slot.start)));
+    last = Math.max(last, endMinutesOf(slot));
+  }
+  if (last <= first) return null;
+  return { first: Math.floor(first / 60) * 60, last: Math.ceil(last / 60) * 60 };
+}
+
+function guideScale(slots) {
+  let shortest = Infinity;
+  for (const slot of slots) {
+    if (slot.title) shortest = Math.min(shortest, endMinutesOf(slot) - minutesOf(timeOf(slot.start)));
+  }
+  const wanted = SHORTEST_BLOCK_PX / Math.max(shortest, 1);
+  return Math.min(Math.max(wanted, SCALE_LIMITS.smallest), SCALE_LIMITS.biggest);
+}
+
+function guideBlock(slot, range, scale) {
+  const block = document.createElement("button");
+  block.type = "button";
+  block.className = `guide-block${slot.title ? "" : " empty"}${slot.edited ? " edited" : ""}`;
+  const start = minutesOf(timeOf(slot.start));
+  block.style.top = `${(start - range.first) * scale}px`;
+  block.style.height = `${(endMinutesOf(slot) - start) * scale}px`;
   const time = document.createElement("span");
   time.className = "time";
-  time.textContent = `${timeOf(slot.start)}–${timeOf(slot.end)}`;
+  time.textContent = `${timeOf(slot.start)} `;
   const title = document.createElement("span");
   title.className = "title";
-  title.textContent = slot.title ? `${slot.title}${slot.subtitle ? ` · ${slot.subtitle}` : ""}` : "Empty (you emptied this)";
+  title.textContent = slot.title ?? "Empty";
+  block.append(time, title);
   if (slot.edited) {
     const badge = document.createElement("span");
     badge.className = "badge edited";
     badge.textContent = "changed";
-    title.append(badge);
+    block.append(badge);
   }
-  const actions = document.createElement("span");
-  actions.className = "actions";
-  const change = document.createElement("button");
-  change.textContent = "Change";
-  change.addEventListener("click", () => openSlot(slot, channel));
-  actions.append(change);
-  if (slot.title) {
-    const empty = document.createElement("button");
-    empty.className = "secondary";
-    empty.textContent = "Empty";
-    empty.addEventListener("click", async () => {
-      await api(`/guide/slots/${slot.id}/clear`, { method: "POST", body: { start: slot.start } });
-      loadGuide();
-    });
-    actions.append(empty);
+  if (slot.subtitle) {
+    const sub = document.createElement("span");
+    sub.className = "sub";
+    sub.textContent = slot.subtitle;
+    block.append(sub);
   }
-  if (slot.edited) {
-    const restore = document.createElement("button");
-    restore.className = "secondary";
-    restore.textContent = "Undo";
-    restore.addEventListener("click", async () => {
-      await api(`/guide/slots/${slot.id}/restore`, { method: "POST", body: { start: slot.start } });
-      loadGuide();
-    });
-    actions.append(restore);
+  block.title = `${timeOf(slot.start)}–${timeOf(slot.end)} ${slot.title ?? "Empty"}${slot.subtitle ? ` · ${slot.subtitle}` : ""}`;
+  block.addEventListener("click", (event) => {
+    event.stopPropagation();
+    openSlot(slot);
+  });
+  return block;
+}
+
+function guideDayHeader(day, week, shuffles) {
+  const header = document.createElement("div");
+  header.className = `guide-head${day === week.today ? " today" : ""}`;
+  const name = document.createElement("div");
+  name.textContent = dayLabel(day, { weekday: "short", day: "numeric", month: "short" });
+  header.append(name);
+  if (shuffles) {
+    const shuffle = document.createElement("button");
+    shuffle.className = "secondary";
+    shuffle.textContent = "Shuffle day";
+    shuffle.addEventListener("click", () => guideAction(() => api("/guide/shuffle", {
+      method: "POST", body: { channel_id: week.channel.id, day, whole_week: false },
+    })));
+    header.append(shuffle);
   }
-  row.append(time, title, actions);
-  return row;
+  return header;
+}
+
+function guideTimes(range, scale) {
+  const times = document.createElement("div");
+  times.className = "guide-times";
+  times.style.height = `${(range.last - range.first) * scale}px`;
+  for (let minutes = range.first; minutes < range.last; minutes += 60) {
+    const label = document.createElement("span");
+    label.style.top = `${(minutes - range.first) * scale}px`;
+    label.textContent = clockOf(minutes);
+    times.append(label);
+  }
+  return times;
+}
+
+function guideDayColumn(day, week, range, scale) {
+  const column = document.createElement("div");
+  column.className = "guide-day";
+  column.style.height = `${(range.last - range.first) * scale}px`;
+  const hours = week.channel.hours[weekdayKey(day)];
+  if (hours) {
+    const top = (minutesOf(hours.start) - range.first) * scale;
+    const open = document.createElement("div");
+    open.className = "guide-open";
+    open.style.top = `${top}px`;
+    open.style.height = `${(minutesOf(hours.end) - minutesOf(hours.start)) * scale}px`;
+    // Keeps the hour lines of the open hours in line with those of the closed hours.
+    open.style.backgroundPositionY = `${-top}px`;
+    column.append(open);
+  }
+  for (const slot of week.slots) {
+    if (dayOf(slot.start) === day) column.append(guideBlock(slot, range, scale));
+  }
+  column.addEventListener("click", (event) => {
+    const offset = event.clientY - column.getBoundingClientRect().top;
+    const minutes = range.first + Math.floor(offset / scale / ADD_STEP_MINUTES) * ADD_STEP_MINUTES;
+    openSlot({ id: null, start: `${day}T${clockOf(minutes)}:00`, end: null, title: null, edited: false });
+  });
+  return column;
+}
+
+function renderGuideWeek(week) {
+  const range = guideRange(week);
+  if (!range) {
+    const closed = document.createElement("p");
+    closed.className = "muted";
+    closed.textContent = "This channel is closed all week. Set its hours in the Channels tab.";
+    $("#guide-week").replaceChildren(closed);
+    return;
+  }
+  const scale = guideScale(week.slots);
+  const shuffles = week.channel.order === "shuffle";
+  const table = document.createElement("div");
+  table.className = "guide-table";
+  table.style.setProperty("--hour", `${60 * scale}px`);
+  const corner = document.createElement("div");
+  corner.className = "guide-corner";
+  table.append(corner);
+  for (const day of week.days) table.append(guideDayHeader(day, week, shuffles));
+  table.append(guideTimes(range, scale));
+  for (const day of week.days) table.append(guideDayColumn(day, week, range, scale));
+  $("#guide-week").replaceChildren(table);
 }
 
 async function loadGuide() {
-  const input = $("#guide-day");
-  if (!input.value) input.value = new Date().toLocaleDateString("en-CA");
-  guideDay = input.value;
-  const guide = await api(`/guide?day=${guideDay}`);
-  const sections = guide.channels.map((channel) => {
-    const section = document.createElement("div");
-    section.className = "guide-channel";
-    const heading = document.createElement("h3");
-    heading.textContent = `${channel.number}. ${channel.name}`;
-    section.append(heading);
-    if (channel.slots.length === 0) {
-      const none = document.createElement("p");
-      none.className = "muted small";
-      none.textContent = "Nothing on this day.";
-      section.append(none);
-    }
-    for (const slot of channel.slots) section.append(slotRow(slot, channel));
-    return section;
-  });
-  if (sections.length === 0) {
-    const none = document.createElement("p");
-    none.className = "muted";
-    none.textContent = "No channels yet. Make one in the Channels tab.";
-    sections.push(none);
-  }
-  $("#guide-days").replaceChildren(...sections);
+  const channels = await api("/channels");
+  const hasChannels = channels.length > 0;
+  $("#guide-no-channels").hidden = hasChannels;
+  $("#guide-controls").hidden = !hasChannels;
+  $("#guide-week-action").hidden = !hasChannels;
+  if (!hasChannels) return;
+  if (!channels.some((channel) => channel.id === guideChannelId)) guideChannelId = channels[0].id;
+  $("#guide-channel").replaceChildren(...channels.map((channel) => new Option(`${channel.number}. ${channel.name}`, channel.id)));
+  $("#guide-channel").value = guideChannelId;
+  await loadGuideWeek();
 }
 
-$("#guide-day").addEventListener("change", loadGuide);
-$("#generate-guide").addEventListener("click", async () => {
-  await api(`/guide/generate?day=${guideDay}`, { method: "POST" });
-  loadGuide();
+async function loadGuideWeek() {
+  const params = new URLSearchParams({ channel_id: guideChannelId });
+  if (guideDay) params.set("day", guideDay);
+  guideWeek = await api(`/guide/week?${params}`);
+  guideDay = guideWeek.week_start;
+  const shuffles = guideWeek.channel.order === "shuffle";
+  const dateOptions = { day: "numeric", month: "short" };
+  $("#guide-week-action").textContent = shuffles ? "Shuffle week" : "Fill again";
+  $("#guide-week-label").textContent = `${dayLabel(guideWeek.days[0], dateOptions)} – ${dayLabel(guideWeek.days[6], dateOptions)}`;
+  $("#guide-help").textContent = shuffles
+    ? "Click a programme to change or empty it. Click an empty place to add a programme there. Shuffle gives a new random order. Programmes you changed or emptied stay."
+    : "Click a programme to change or empty it. Click an empty place to add a programme there. \"Fill again\" fills the week again in order, for example after new files. Programmes you changed or emptied stay.";
+  renderGuideWeek(guideWeek);
+}
+
+async function guideAction(action) {
+  setMessage($("#guide-message"), "");
+  try {
+    await action();
+    await loadGuideWeek();
+  } catch (error) {
+    setMessage($("#guide-message"), describeValidationError(error), "error");
+  }
+}
+
+$("#guide-channel").addEventListener("change", () => {
+  guideChannelId = $("#guide-channel").value;
+  loadGuideWeek();
 });
+$("#guide-previous").addEventListener("click", () => {
+  guideDay = addDays(guideDay, -7);
+  loadGuideWeek();
+});
+$("#guide-next").addEventListener("click", () => {
+  guideDay = addDays(guideDay, 7);
+  loadGuideWeek();
+});
+$("#guide-this-week").addEventListener("click", () => {
+  guideDay = null;
+  loadGuideWeek();
+});
+$("#guide-week-action").addEventListener("click", () => guideAction(() => (
+  guideWeek.channel.order === "shuffle"
+    ? api("/guide/shuffle", { method: "POST", body: { channel_id: guideWeek.channel.id, day: guideWeek.week_start, whole_week: true } })
+    : api(`/guide/generate?day=${guideWeek.week_start}`, { method: "POST" })
+)));
 
 function renderProgrammeChoices() {
   const filter = $("#programme-filter").value.toLowerCase();
@@ -773,7 +923,7 @@ function renderProgrammeChoices() {
             body: { channel_id: editingSlot.channel.id, start: editingSlot.slot.start, ref: choice.ref, replace_slot_id: editingSlot.slot.id },
           });
           $("#slot-dialog").close();
-          loadGuide();
+          loadGuideWeek();
         } catch (error) {
           setMessage($("#slot-message"), describeValidationError(error), "error");
         }
@@ -783,9 +933,16 @@ function renderProgrammeChoices() {
   $("#programme-list").replaceChildren(...rows);
 }
 
-async function openSlot(slot, channel) {
+async function openSlot(slot) {
+  const { channel } = guideWeek;
   editingSlot = { slot, channel };
-  $("#slot-when").textContent = `${channel.name}, ${guideDay} at ${timeOf(slot.start)}. The new programme starts at this time.`;
+  const when = `${channel.name}, ${dayLabel(dayOf(slot.start), { weekday: "long", day: "numeric", month: "short" })} at ${timeOf(slot.start)}`;
+  $("#slot-heading").textContent = slot.id ? "Change this programme" : "Add a programme";
+  $("#slot-when").textContent = slot.id
+    ? `${when}. Pick a new programme: it starts at this time.`
+    : `${when}. Programmes the box filled in make way. Programmes you changed or emptied do not move.`;
+  $("#slot-empty").hidden = !slot.title;
+  $("#slot-undo").hidden = !slot.edited;
   $("#programme-filter").value = "";
   setMessage($("#slot-message"), "");
   programmeChoices = await api(`/programmes?kind=${channel.kind}`);
@@ -793,6 +950,19 @@ async function openSlot(slot, channel) {
   $("#slot-dialog").showModal();
 }
 
+async function changeEditingSlot(action) {
+  const { slot } = editingSlot;
+  try {
+    await api(`/guide/slots/${slot.id}/${action}`, { method: "POST", body: { start: slot.start } });
+    $("#slot-dialog").close();
+    loadGuideWeek();
+  } catch (error) {
+    setMessage($("#slot-message"), describeValidationError(error), "error");
+  }
+}
+
+$("#slot-empty").addEventListener("click", () => changeEditingSlot("clear"));
+$("#slot-undo").addEventListener("click", () => changeEditingSlot("restore"));
 $("#programme-filter").addEventListener("input", renderProgrammeChoices);
 
 // ---- Activity ----

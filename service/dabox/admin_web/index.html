@@ -110,11 +110,21 @@
         <div class="card">
           <div class="row spread">
             <h2>Guide</h2>
-            <button id="generate-guide" class="secondary">Generate again</button>
+            <button id="guide-week-action" class="secondary"></button>
           </div>
-          <label>Day <input id="guide-day" type="date"></label>
-          <p class="muted small">"Generate again" refills the week. Programmes you changed or emptied stay.</p>
-          <div id="guide-days"></div>
+          <p id="guide-no-channels" class="muted" hidden>No channels yet. Make one in the Channels tab.</p>
+          <div id="guide-controls">
+            <label>Channel <select id="guide-channel"></select></label>
+            <div class="row spread guide-week-nav">
+              <button id="guide-previous" class="secondary" aria-label="Previous week">‹</button>
+              <span id="guide-week-label"></span>
+              <button id="guide-this-week" class="secondary">This week</button>
+              <button id="guide-next" class="secondary" aria-label="Next week">›</button>
+            </div>
+            <p id="guide-help" class="muted small"></p>
+            <p id="guide-message" class="message"></p>
+            <div id="guide-week" class="guide-scroll"></div>
+          </div>
         </div>
       </div>
 
@@ -319,8 +329,12 @@
 
   <dialog id="slot-dialog">
     <form method="dialog" class="dialog-close"><button class="link" aria-label="Close">Close</button></form>
-    <h2>Change this programme</h2>
+    <h2 id="slot-heading">Change this programme</h2>
     <p id="slot-when" class="muted"></p>
+    <div id="slot-actions" class="row wrap">
+      <button type="button" id="slot-empty" class="secondary">Empty</button>
+      <button type="button" id="slot-undo" class="secondary">Undo my change</button>
+    </div>
     <label>Search <input id="programme-filter" placeholder="Type to filter"></label>
     <ul id="programme-list" class="candidates"></ul>
     <p id="slot-message" class="message"></p>

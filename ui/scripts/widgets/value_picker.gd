@@ -43,6 +43,10 @@ func has_value() -> bool:
 	return value != UNSET
 
 
+func is_editing() -> bool:
+	return _editing
+
+
 static func format_minutes(minutes: int) -> String:
 	var hours := minutes / 60
 	var rest := minutes % 60

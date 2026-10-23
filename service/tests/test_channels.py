@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from dabox.channels import (
     Channel,
     ChannelKind,
+    ChannelShuffle,
     OpenHours,
     PlayOrder,
     Programme,
@@ -86,6 +87,31 @@ def test_shuffle_is_repeatable() -> None:
     first, _ = generate_channel_week(channel(PlayOrder.SHUFFLE), programmes, MONDAY, UTC, 0, [])
     second, _ = generate_channel_week(channel(PlayOrder.SHUFFLE), programmes, MONDAY, UTC, 0, [])
     assert [slot.programme.title for slot in first] == [slot.programme.title for slot in second]
+
+
+def titles_by_day(slots: list[Slot]) -> dict[str, list[str]]:
+    days: dict[str, list[str]] = {}
+    for slot in slots:
+        days.setdefault(slot.start.strftime("%a"), []).append(slot.programme.title)
+    return days
+
+
+def test_week_shuffle_gives_a_new_order() -> None:
+    programmes = [programme(name, 6) for name in "abcdefghij"]
+    plain, _ = generate_channel_week(channel(PlayOrder.SHUFFLE), programmes, MONDAY, UTC, 0, [])
+    shuffled, _ = generate_channel_week(channel(PlayOrder.SHUFFLE), programmes, MONDAY, UTC, 0, [], ChannelShuffle(week="x1"))
+    assert titles_by_day(plain) != titles_by_day(shuffled)
+
+
+def test_day_shuffle_changes_only_that_day() -> None:
+    programmes = [programme(name, 6) for name in "abcdefghij"]
+    week = ChannelShuffle(week="x1")
+    plain, _ = generate_channel_week(channel(PlayOrder.SHUFFLE), programmes, MONDAY, UTC, 0, [], week)
+    one_day = ChannelShuffle(week="x1", days={MONDAY.date().replace(day=21): "y1"})
+    shuffled, _ = generate_channel_week(channel(PlayOrder.SHUFFLE), programmes, MONDAY, UTC, 0, [], one_day)
+    before, after = titles_by_day(plain), titles_by_day(shuffled)
+    assert before["Wed"] != after["Wed"]
+    assert {day: titles for day, titles in before.items() if day != "Wed"} == {day: titles for day, titles in after.items() if day != "Wed"}
 
 
 def test_generator_fills_around_edited_slots() -> None:
@@ -243,3 +269,81 @@ def test_guide_without_setup_has_no_limits(services: Services, box_client: TestC
     services.guide.clock = lambda zone: WEDNESDAY_1830.replace(tzinfo=zone)
     guide = box_client.get("/box/guide").json()
     assert (guide["game_windows"], guide["bedtime"]) == ([], None)
+
+
+def test_week_view_has_one_channel(guide_services: Services, admin_client: TestClient) -> None:
+    cartoons = admin_client.post("/api/admin/channels", json=channel_body("Cartoons", "video", [{"kind": "show", "id": show_id(guide_services)}])).json()
+    admin_client.post("/api/admin/channels", json=channel_body("Films", "video", [{"kind": "film", "id": guide_services.library.library.films[0].id}]))
+
+    week = admin_client.get("/api/admin/guide/week", params={"channel_id": cartoons["id"], "day": "2026-10-24"}).json()
+
+    assert (week["week_start"], week["today"], week["channel"]["name"]) == ("2026-10-19", "2026-10-21", "Cartoons")
+    assert week["days"][0] == "2026-10-19" and week["days"][6] == "2026-10-25"
+    assert {slot["channel_id"] for slot in week["slots"]} == {cartoons["id"]}
+    assert len(week["slots"]) == 7 * 6
+    assert admin_client.get("/api/admin/guide/week", params={"channel_id": "nope"}).status_code == 404
+
+
+def shuffle_channel(services: Services, admin_client: TestClient) -> dict:
+    body = channel_body("Mixed", "video", [{"kind": "show", "id": show_id(services)}], order="shuffle")
+    return admin_client.post("/api/admin/channels", json=body).json()
+
+
+def week_slots(admin_client: TestClient, channel_id: str) -> list[dict]:
+    return admin_client.get("/api/admin/guide/week", params={"channel_id": channel_id, "day": "2026-10-21"}).json()["slots"]
+
+
+def test_day_shuffle_keeps_other_days_and_edits(guide_services: Services, admin_client: TestClient) -> None:
+    channel = shuffle_channel(guide_services, admin_client)
+    wednesday_first = next(slot for slot in week_slots(admin_client, channel["id"]) if slot["start"].startswith("2026-10-21"))
+    admin_client.post(f"/api/admin/guide/slots/{wednesday_first['id']}/clear", json={"start": wednesday_first["start"]})
+    # Emptying a slot does not fill the week again, so fill it here for a fair "before".
+    admin_client.post("/api/admin/guide/generate")
+    before = week_slots(admin_client, channel["id"])
+
+    response = admin_client.post("/api/admin/guide/shuffle", json={"channel_id": channel["id"], "day": "2026-10-21", "whole_week": False})
+    assert response.status_code == 200, response.text
+
+    after = week_slots(admin_client, channel["id"])
+    not_wednesday = lambda slots: [(slot["start"], slot["subtitle"]) for slot in slots if not slot["start"].startswith("2026-10-21")]
+    assert not_wednesday(after) == not_wednesday(before)
+    emptied = next(slot for slot in after if slot["id"] == wednesday_first["id"])
+    assert (emptied["title"], emptied["edited"]) == (None, True)
+    schedule = guide_services.guide.week(week_start_for(guide_services.guide.now()))
+    assert set(schedule.shuffles[channel["id"]].days) == {WEDNESDAY_1830.date()}
+
+
+def test_shuffles_survive_filling_the_week_again(guide_services: Services, admin_client: TestClient) -> None:
+    channel = shuffle_channel(guide_services, admin_client)
+    admin_client.post("/api/admin/guide/shuffle", json={"channel_id": channel["id"], "day": "2026-10-21", "whole_week": True})
+    admin_client.post("/api/admin/guide/shuffle", json={"channel_id": channel["id"], "day": "2026-10-22", "whole_week": False})
+    shuffled = week_slots(admin_client, channel["id"])
+
+    admin_client.post("/api/admin/guide/generate")
+
+    assert week_slots(admin_client, channel["id"]) == shuffled
+
+
+def test_week_shuffle_clears_day_shuffles(guide_services: Services, admin_client: TestClient) -> None:
+    channel = shuffle_channel(guide_services, admin_client)
+    admin_client.post("/api/admin/guide/shuffle", json={"channel_id": channel["id"], "day": "2026-10-22", "whole_week": False})
+    admin_client.post("/api/admin/guide/shuffle", json={"channel_id": channel["id"], "day": "2026-10-22", "whole_week": True})
+    shuffle = guide_services.guide.week(week_start_for(guide_services.guide.now())).shuffles[channel["id"]]
+    assert shuffle.week and shuffle.days == {}
+
+
+def test_in_order_channel_cannot_be_shuffled(guide_services: Services, admin_client: TestClient) -> None:
+    channel = admin_client.post("/api/admin/channels", json=channel_body("Cartoons", "video", [{"kind": "show", "id": show_id(guide_services)}])).json()
+    response = admin_client.post("/api/admin/guide/shuffle", json={"channel_id": channel["id"], "day": "2026-10-21", "whole_week": True})
+    assert response.status_code == 422
+
+
+def test_place_at_a_clicked_time_uses_the_box_time_zone(guide_services: Services, admin_client: TestClient) -> None:
+    channel = admin_client.post("/api/admin/channels", json=channel_body("Cartoons", "video", [{"kind": "show", "id": show_id(guide_services)}])).json()
+    film_ref = f"film:{guide_services.library.library.films[0].id}"
+
+    placed = admin_client.post("/api/admin/guide/slots", json={"channel_id": channel["id"], "start": "2026-10-21T19:05:00", "ref": film_ref})
+
+    assert placed.status_code == 200, placed.text
+    slot = next(slot for slot in week_slots(admin_client, channel["id"]) if slot["ref"] == film_ref)
+    assert (slot["start"], slot["edited"]) == ("2026-10-21T19:05:00+01:00", True)

@@ -37,6 +37,10 @@ var _title_label: Label
 var _page_holder: MarginContainer
 var _back_button: Button
 var _next_button: Button
+## The control in the step's page that had focus last. Up from Back or Next goes back to it.
+var _last_page_focus: Control
+## True once the step is complete, so a later change in the step does not jump to Next again.
+var _step_completed := false
 
 var _network_connected := false
 var _network_status: Label
@@ -98,6 +102,7 @@ func _ready() -> void:
 	footer.add_child(_next_button)
 	column.add_child(footer)
 	page_margin(column)
+	get_viewport().gui_focus_changed.connect(_remember_page_focus)
 
 	_build_steps()
 	_show_step(0)
@@ -112,6 +117,59 @@ func _exit_tree() -> void:
 
 func _process(_delta: float) -> void:
 	_update_next_button()
+
+
+# Godot's nearest-neighbour search often cannot reach Back and Next from a table
+# (for example from "No games" on Sunday), so the moves to and from them are set here.
+func _input(event: InputEvent) -> void:
+	var focused := get_viewport().gui_get_focus_owner()
+	if focused == null:
+		return
+	var target: Control = null
+	if focused == _back_button or focused == _next_button:
+		target = _footer_move(focused, event)
+	elif event.is_action_pressed("ui_down") and _page_holder.is_ancestor_of(focused) and not _is_editing(focused):
+		var below := focused.find_valid_focus_neighbor(SIDE_BOTTOM)
+		if below == null or not _page_holder.is_ancestor_of(below):
+			target = _footer_entry()
+	if target != null and target != focused:
+		target.grab_focus()
+		get_viewport().set_input_as_handled()
+
+
+func _footer_move(focused: Control, event: InputEvent) -> Control:
+	if event.is_action_pressed("ui_up"):
+		return _page_return_target()
+	if event.is_action_pressed("ui_left") and focused == _next_button and _back_button.visible:
+		return _back_button
+	if event.is_action_pressed("ui_right") and focused == _back_button and _can_focus(_next_button):
+		return _next_button
+	return null
+
+
+func _footer_entry() -> Control:
+	if _can_focus(_next_button):
+		return _next_button
+	return _back_button if _back_button.visible else null
+
+
+func _page_return_target() -> Control:
+	if is_instance_valid(_last_page_focus) and _last_page_focus.is_inside_tree() and _can_focus(_last_page_focus):
+		return _last_page_focus
+	return _steps[_index].focus.call()
+
+
+func _remember_page_focus(control: Control) -> void:
+	if _page_holder.is_ancestor_of(control):
+		_last_page_focus = control
+
+
+static func _can_focus(control: Control) -> bool:
+	return control.is_visible_in_tree() and control.focus_mode != Control.FOCUS_NONE
+
+
+static func _is_editing(control: Control) -> bool:
+	return control is ValuePicker and (control as ValuePicker).is_editing()
 
 
 func _update_next_button() -> void:
@@ -145,6 +203,8 @@ func _show_step(index: int) -> void:
 		_page_holder.remove_child(child)
 	step.page.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_page_holder.add_child(step.page)
+	_last_page_focus = null
+	_step_completed = step.is_ready.call()
 	_step_label.text = "Setup  ·  Step %d of %d" % [index + 1, _steps.size()]
 	_title_label.text = step.title
 	var last := index == _steps.size() - 1
@@ -165,6 +225,14 @@ func _focus_next_button() -> void:
 	_update_next_button()
 	if not _next_button.disabled:
 		_next_button.grab_focus()
+
+
+## For steps with a row per day: go to Next when the last day is set.
+func _focus_next_when_completed() -> void:
+	if _step_completed or not _steps[_index].is_ready.call():
+		return
+	_step_completed = true
+	_focus_next_button()
 
 
 func _build_steps() -> void:
@@ -492,6 +560,9 @@ func _game_window_step() -> Step:
 			to_picker.disabled = not games
 			from_picker.focus_mode = Control.FOCUS_ALL if games else Control.FOCUS_NONE
 			to_picker.focus_mode = Control.FOCUS_ALL if games else Control.FOCUS_NONE)
+		choice.changed.connect(func(_value: Variant) -> void: _focus_next_when_completed())
+		from_picker.editing_finished.connect(_focus_next_when_completed)
+		to_picker.editing_finished.connect(_focus_next_when_completed)
 		_game_rows[day[0]] = {"choice": choice, "from": from_picker, "to": to_picker}
 	page.add_child(_scrolling(grid))
 	_game_message = UiTheme.muted_label("")
@@ -544,6 +615,7 @@ func _bedtime_step() -> Step:
 		grid.add_child(label)
 		var picker := _time_picker(19 * 60)
 		picker.custom_minimum_size = Vector2(200, 72)
+		picker.editing_finished.connect(_focus_next_when_completed)
 		grid.add_child(picker)
 		_bedtimes[day[0]] = picker
 	page.add_child(_scrolling(grid))
@@ -707,6 +779,7 @@ func _copy_monday_button(action: Callable) -> Button:
 	button.text = "Copy Monday to every day"
 	button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	button.pressed.connect(action)
+	button.pressed.connect(_focus_next_when_completed)
 	return button
 
 
