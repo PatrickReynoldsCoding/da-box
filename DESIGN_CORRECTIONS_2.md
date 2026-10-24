@@ -16,7 +16,7 @@ Found on a real Linux Mint laptop (2026-10-24) with a 1 TB Toshiba USB disk (exF
 | 6. Tests for many kinds of USB drive | Done: 12 drive samples (2 real), udev rule test | Record more real drives |
 | 7. Settings screen on the box (Update da-box, Posters and info) | Done, tried on the laptop. Posters and info is a placeholder until part 4 | Part 4 |
 | 8. Remove da-box from the admin app (back to plain Linux) | Done, tests in the repo | Try it on the laptop (it removes da-box) |
-| 9. Power menu: Esc on Home or the Guide button, then Shut down | Spec, decided | With 1 to 4 |
+| 9. Power menu: Esc on Home or the Guide button, then Shut down | Done, service and key tests | Try the Guide button on the 8BitDo |
 
 Already fixed in PR #3 (merged): the box did not see the disk at all (flat `lsblk` output), and it mounted it where the kid user cannot read it (`ID_BUS=ata`).
 
@@ -330,3 +330,9 @@ None at the moment (answered 2026-10-24).
 - A test checks that the proxy allow-list (`install/files/dabox-filter`) lets every source through.
 - TV: Settings → Posters and info (sources, Enter TMDB key, ScreenScraper account, Use a phone, the counts, Look up now with "Are you sure?"); `text_entry_screen.gd`; `match_screen.gd` from "Posters and info" on a video (parent mode, `item_actions_screen.gd`, was `usb_item_screen.gd`), a group or an album.
 - Admin app: Settings → Posters and info, with the sources, the counts, Look up now and the ScreenScraper fields; groups open the details dialog like videos.
+
+**Part 9, Power menu (2026-10-24): done**, not yet tried on the laptop.
+- `power_menu_screen.gd`: a panel over the screen (`overlay` in `screen.gd`: the screen below stays visible), Cancel focused first, the focus kept inside the panel, B or Esc means Cancel.
+- Opens with Back on Home, or the Guide button (`JOY_BUTTON_GUIDE`) on any screen but a playing video or game (`main.gd`).
+- `POST /box/power/off` (box only, any user): stops what plays, then powers off, as at bedtime.
+- Not tried yet: whether the 8BitDo's Home button reaches Godot as the Guide button on Linux (some pads keep it for their own use).

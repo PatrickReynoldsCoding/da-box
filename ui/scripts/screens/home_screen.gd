@@ -89,8 +89,9 @@ func default_focus() -> Control:
 	return _videos_tile
 
 
+## Home has nothing to go back to: Esc or B opens the power menu (DESIGN_CORRECTIONS_2.md, part 9).
 func go_back() -> void:
-	pass
+	open_screen.emit(PowerMenuScreen.new())
 
 
 func on_shown() -> void:

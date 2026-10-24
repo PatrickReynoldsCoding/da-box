@@ -111,8 +111,8 @@ func _run_main_screens() -> void:
 
 func _run_tv() -> void:
 	# Back to Home, then the TV tile (left of Videos).
-	for i in 3:
-		await _press("ui_cancel")
+	# Back on Home opens the power menu, so go back only until Home shows.
+	await _go_home()
 	await _wait(0.5)
 	var tv_tile := get_tree().root.find_child("TVTile", true, false) as Control
 	if tv_tile == null:

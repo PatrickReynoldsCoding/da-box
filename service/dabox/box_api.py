@@ -165,6 +165,12 @@ def art_response(services: Services, item_id: str) -> FileResponse:
     raise HTTPException(status_code=404, detail="No art for this item")
 
 
+@router.post("/power/off")
+def power_off(services: Services = Depends(get_services)) -> None:
+    """Shut down from the TV's power menu (DESIGN_CORRECTIONS_2.md, part 9). Anyone at the TV may."""
+    services.limits.power_off_now()
+
+
 @router.post("/parent-mode/leave")
 def leave_parent_mode(services: Services = Depends(get_services)) -> None:
     services.box_state.set_parent_mode(False)

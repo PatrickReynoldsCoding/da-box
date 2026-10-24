@@ -66,7 +66,25 @@ static func add_controller_buttons() -> void:
 				InputMap.action_add_event(action, event)
 
 
+## The controller's Guide button: the Xbox button, the PlayStation button, the Home button on
+## 8BitDo and Nintendo-style pads. It opens the power menu.
+static func is_guide_button(event: InputEvent) -> bool:
+	var button := event as InputEventJoypadButton
+	return button != null and button.pressed and button.button_index == JOY_BUTTON_GUIDE
+
+
+## Not over a playing video or game, and not twice.
+func can_open_power_menu() -> bool:
+	var top := _top()
+	return top != null and not (top is VideoScreen or top is GameScreen or top is PowerMenuScreen)
+
+
 func _unhandled_input(event: InputEvent) -> void:
+	if is_guide_button(event):
+		get_viewport().set_input_as_handled()
+		if can_open_power_menu():
+			_push(PowerMenuScreen.new())
+		return
 	if event.is_action_pressed("ui_cancel") and not _stack.is_empty():
 		get_viewport().set_input_as_handled()
 		_stack.back().go_back()
@@ -175,7 +193,7 @@ func _push(screen: Screen) -> void:
 		var below: Screen = _stack.back()
 		# Remember the focus, so Back returns to the same tile.
 		below.set_meta("last_focus", get_viewport().gui_get_focus_owner())
-		below.visible = false
+		below.visible = screen.overlay
 	_stack.append(screen)
 	screen.open_screen.connect(_push)
 	screen.close_screen.connect(_pop.bind(screen))

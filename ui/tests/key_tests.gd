@@ -33,6 +33,7 @@ func _run() -> void:
 	await _test_group_screen()
 	await _test_posters_settings()
 	await _test_match_screen()
+	await _test_power_menu()
 	print("Key tests: %d checks, %d failed" % [_checks, _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
 
@@ -466,6 +467,50 @@ func _test_match_screen() -> void:
 	await _frames()
 	_check(screen._message.text == "Nothing found. Change the search." and _focus() == screen._search_button, "match: nothing found goes to the search")
 	await _close(screen)
+
+
+# ---- Power menu (DESIGN_CORRECTIONS_2.md, part 9) ----
+
+func _test_power_menu() -> void:
+	var home := HomeScreen.new()
+	await _show(home)
+	var opened: Array = []
+	home.open_screen.connect(func(screen: Screen) -> void: opened.append(screen))
+	home.go_back()
+	_check(opened.size() == 1 and opened[0] is PowerMenuScreen and opened[0].overlay, "power: Back on Home opens the power menu over Home")
+	for screen in opened:
+		screen.free()
+	await _close(home)
+
+	var main_script: GDScript = preload("res://scripts/main.gd")
+	_check(main_script.is_guide_button(_joy_event(JOY_BUTTON_GUIDE, 0)), "power: the Guide button is recognised")
+	_check(not main_script.is_guide_button(_joy_event(JOY_BUTTON_A, 0)), "power: A is not the Guide button")
+	var main: Node = main_script.new()
+	for case in [[VideosScreen.new(), true], [VideoScreen.new("x"), false], [GameScreen.new("x"), false], [PowerMenuScreen.new(), false]]:
+		var stack: Array[Screen] = [case[0]]
+		main._stack = stack
+		_check(main.can_open_power_menu() == case[1], "power: Guide over %s %s" % [case[0].get_script().get_global_name(), "opens" if case[1] else "does nothing"])
+		case[0].free()
+	main.free()
+
+	var menu := PowerMenuScreen.new()
+	await _show(menu)
+	_check(_focus() == menu.cancel_button, "power: Cancel has the focus first")
+	for action in ["ui_up", "ui_down", "ui_left"]:
+		await _press(action)
+		_check(_focus() == menu.cancel_button, "power: %s stays on Cancel, in the panel" % action)
+	await _press("ui_right")
+	_check(_focus() == menu.shut_down_button, "power: Right goes to Shut down")
+	await _press("ui_down")
+	_check(_focus() == menu.shut_down_button, "power: Down stays in the panel")
+	var closed := [false]
+	menu.close_screen.connect(func() -> void: closed[0] = true)
+	menu.go_back()
+	_check(closed[0], "power: Back means Cancel")
+	# Offline (no service): the box says it could not turn off and gives the buttons back.
+	await menu._shut_down()
+	_check(not menu.cancel_button.disabled and menu._message.text == "The box could not turn off.", "power: a failed shut down says so")
+	await _close(menu)
 
 
 func _joy_event(button: JoyButton, device: int, pressed: bool = true) -> InputEventJoypadButton:
