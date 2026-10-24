@@ -117,6 +117,7 @@ class Show(BaseModel):
 
     id: str
     title: str
+    folder: Path
     art_path: Path | None
     episodes: list[Episode]
 

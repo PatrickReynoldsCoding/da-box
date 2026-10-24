@@ -1,14 +1,14 @@
 # Kids TV Box: design doc CORRECTIONS
 
-## Status (2026-10-23)
+## Status (2026-10-24)
 
 | Item | Status | Next step |
 |---|---|---|
-| Next button in the setup | Done | Try it on the VM |
+| Next button in the setup | Done, key test in the repo | Try it on the VM |
 | Guide table in the admin app | Done | Try it on the VM |
-| Copy from USB on the box | Not started | Answer the open questions, then build |
-| Music: artists, songs, shuffle, search, playlists | Not started | Answer the open questions, then build |
-| Loose ends | Open | See the last section |
+| Copy from USB on the box | Done | Try it on the VM with a real USB drive |
+| Music: artists, songs, shuffle, search, playlists | Done | Try it on the VM (playback not tried: no mpv on the build machine) |
+| Loose ends | Done in da-box, except 3 (kept as it was) | See the last section |
 
 ### Try the finished work on the VM
 
@@ -16,6 +16,8 @@
 2. Reset the box settings to see the setup again (back up `/var/lib/dabox`, as before).
 3. On the TV: go through the setup with the keyboard only. Check Game window and Bedtime: the jump to Next, Down to Next, Left/Right between Back and Next, Up back to the table.
 4. In the admin app (http://localhost:8081): Guide tab. Check the channel picker, the week picker, Shuffle week, Shuffle day, Fill again, a click on a programme, a click on an empty place.
+5. Copy from USB: make a disk image with `Films/`, `TV/`, `Music/` and `Games/` folders, turn on parent mode in the admin app, `vm/box-vm.sh usb-in stick.img`. On the TV: the USB tile on Home, tick a folder, open a folder and tick one item, Copy, leave the progress screen (the bar on Home), the message at the end. Pull the stick during a copy (`vm/box-vm.sh usb-out`): the copy stops with "USB removed", and no half item is left.
+6. Music on the TV: the menu row, "+" on a song and on Now playing, a new playlist named with the keyboard, Rename, Delete (press two times), "−" on a song. In the admin app: Content tab, Playlists.
 
 ## Next button difficult to select in the UI
 This screen it is very hard to figure out how to get to the next button without a mouse. 
@@ -104,7 +106,13 @@ Decisions:
 - The single-item "Copy to the box" action for TV shows and games is **on the box**.
 - The box **can be used** (watch, listen, play) while the copy runs in the background.
 
-Status: **not started**.
+Status: **done** (2026-10-24), not yet tried on the VM.
+- Service: `service/dabox/usb_copy.py` (tree, space check, copy job) and `service/dabox/usb_copy_api.py`: `GET /box/usb/tree`, `POST /box/usb/check`, `POST /box/usb/copy`, `POST /box/usb/copy/stop` and `POST /box/content/{id}/copy-to-box` need parent mode; `GET /box/usb/copy` (progress) does not. `service/dabox/copying.py` now copies films, albums, games and shows the same way for the job and the admin app.
+- A show that is on the box in part gets only its missing episodes. The space check keeps 500 MB free for the box itself.
+- The job scans the library before it reports "done", so new items are there when the TV says so.
+- Box UI: USB tile on Home (parent mode), `copy_usb_screen.gd` (tick list), `copy_progress_screen.gd`, the bar on Home, a message at the end (also on mpv's screen through the agent). "Copy to the box" on a USB film or game (Play / Copy to the box in parent mode) and on a USB album. A single TV show is copied from the tick list: the box has no TV show screen.
+- Added: "Stop copying" on the progress screen (parent mode).
+- Tests: 9 service tests (`tests/test_usb_copy.py`), key tests for the tick list. Tried with the dev service and a test stick in `dev/usb`.
 
 Plan, service:
 1. **Read the drive:** an API that lists a USB drive as a tree: top folders (`Films`, `TV`, `Music`, `Games`), then the films, shows, albums and games in each, with the size of each. It marks the items that are already on the box.
@@ -123,13 +131,13 @@ Plan, box UI (Godot):
 
 Plan, tests: service tests for the tree, the space check, skip, the job and parent mode. A Godot test for the tick list keys.
 
-Open questions:
-1. **Where is "Copy from USB" on the box?** For example a Home tile that shows only in parent mode, or a button on the USB badge.
-2. **Where does the progress show** when the user leaves the progress screen? For example a small bar on Home, or nothing until the copy ends.
-3. **Films and albums:** today "Copy to the box" for them is in the admin app. Does it also go on the box? Does it stay in the admin app?
-4. **The drive is pulled out during a copy:** the job stops, the half item is removed. Does the box show a message on the TV?
-5. **Parent mode is switched off during a copy:** does the copy go on?
-6. **Upload tab in the admin app:** does it stay as it is?
+Answers (2026-10-24):
+1. **Where is "Copy from USB" on the box?** A Home tile that shows only in parent mode.
+2. **Where does the progress show** when the user leaves the progress screen? A small progress bar on Home while the copy runs, and a message on the TV when it ends.
+3. **Films and albums:** "Copy to the box" goes on the box for films, albums and games, and stays in the admin app.
+4. **The drive is pulled out during a copy:** the job stops, the half item is removed, and the TV says "USB removed. Copied X of Y. Plug it in again to finish." The items already copied are skipped next time.
+5. **Parent mode is switched off during a copy:** the copy goes on. Parent mode is needed only to start a copy.
+6. **Upload tab in the admin app:** stays as it is.
 
 ## Music
 
@@ -151,7 +159,12 @@ Decisions:
 - Search shows artists, albums and songs in **one result list**.
 - Shuffle all does **not** include music from a USB drive.
 
-Status: **not started**.
+Status: **done** (2026-10-24), not yet tried on the VM.
+- Service: `service/dabox/music.py`, `service/dabox/playlists.py`, `service/dabox/music_api.py`. Box: `GET /box/music/artists`, `/songs`, `/search?q=`, `/shuffle[?album_id=]`, `/box/music/albums?artist=`, playlists. Admin: `/api/admin/music/songs` and playlists (also `PUT .../songs` for the order).
+- Playlists are saved in the box store. A deleted song is left out, and dropped from the playlist at its next change. Shuffle all plays up to 500 songs (mpv gets them all on its command line).
+- The agent passes a song id through, so Now playing knows which box song plays.
+- Box UI: the menu row on `music_screen.gd`, `artist_screen.gd`, `playlist_screen.gd`, `add_to_playlist_screen.gd`, `name_screen.gd`, `search_screen.gd`, "Shuffle" on the album screen, "+" on Now playing. Admin app: Playlists card on the Content tab.
+- Tests: 11 service tests (`tests/test_music.py`), key tests for the menu. Tried with the dev service, except playback (no mpv on the build machine).
 
 Plan, service:
 1. **Artists:** an API with all artists (from box and USB albums), and the albums of one artist.
@@ -172,22 +185,23 @@ Plan, admin app: Playlists: make, rename, delete, add and remove songs, change t
 
 Plan, tests: service tests for each API. A Godot test for the menu keys.
 
-Open questions:
-1. **Where is the menu?** For example a row of buttons at the top of the Music screen, or a list on the left.
-2. **Kids' playlists:** can a kid rename or delete any playlist, or only the ones made on the box? Can the parent delete a kid's playlist?
-3. **How a kid adds a song:** from the song list ("Add to playlist"), from Now playing, or both?
-4. **Naming a playlist on the box:** with the on-screen keyboard. Is there a limit on length or on the number of playlists?
-5. **A song on a playlist is deleted or hidden:** remove it from the playlist, or keep it and skip it?
-6. **Where is "Shuffle all music"?** For example in the menu, or on the Albums screen.
+Answers (2026-10-24):
+1. **Where is the menu?** A row of buttons at the top of the Music screen.
+2. **Kids' playlists:** a kid can change (rename, delete, add and remove songs) only the playlists made on the box. The parent (admin app, or the box in parent mode) can change or delete every playlist.
+3. **How a kid adds a song:** both, from the song list and from Now playing.
+4. **Naming a playlist on the box:** with the on-screen keyboard, up to 30 characters. No limit on the number of playlists.
+5. **A song on a playlist is deleted or hidden:** a deleted song goes away from the playlist. A hidden song stays on it but is skipped in kid mode, so it comes back when it is shown again.
+6. **Where is "Shuffle all music"?** In the menu row, as its own button.
 
 ## Loose ends
 
-In da-box:
-1. **No Godot focus test in the repo.** The test for the Next button was a scratch file. Add a key-press test under `ui/tests/` if it should be kept.
-2. **Old admin guide API:** `GET /api/admin/guide` (one day, all channels) is no longer used by the admin app. One test still uses it. Keep it or remove it.
-3. **Emptying or placing a slot does not fill the rest of the week again.** For a shuffle channel, the next fill (Fill again, Undo, a channel change) can change later programmes of that week. This was the same before.
-4. **Dev test media is very short** (1 to 4 minutes). The guide table looks crowded with it. Longer test files would show the table as it is with real content.
-5. **`img_2.png` and `.idea/`** are not committed. `img_2.png` is not used in any doc.
+In da-box (2026-10-24):
+1. **Godot key tests: done.** `ui/tests/key_tests.tscn` (run: `godot --headless --path ui res://tests/key_tests.tscn`): the setup Next button, the Copy from USB tick list, the Music menu and the new screens. It found one more setup bug, now fixed: Right on Back went into the table when Next was not ready.
+2. **Old admin guide API: removed.** `GET /api/admin/guide` is gone; the test uses the week API. "Fill again" returns nothing now (the admin app did not use the answer).
+3. **Emptying or placing a slot does not fill the rest of the week again:** kept as it was.
+4. **Dev test media: done.** 20 minute films, 7 to 11 minute episodes, 2 to 4 minute songs (about 420 MB, under 2 minutes to make). Delete `dev/media` to make it again.
+5. **`img_2.png` and `.idea/`:** `.idea/` is in `.gitignore`. `img_2.png` was only on the Mac.
+6. **Found on the way:** `ui/scripts/main.gd` failed when a screen came back and the control that had focus was gone; fixed.
 
 Outside da-box (this Mac):
 1. **pre-push check for work hosts** was not added (the permission check stopped the edit).

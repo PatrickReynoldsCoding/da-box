@@ -56,7 +56,7 @@ def box_state(services: Services = Depends(get_services)) -> BoxStateView:
     )
 
 
-class _Listing:
+class Listing:
     """What the kid-side lists need: hidden items, metadata, parent mode and the USB setting."""
 
     def __init__(self, services: Services) -> None:
@@ -69,7 +69,7 @@ class _Listing:
 
 @router.get("/films")
 def films(services: Services = Depends(get_services)) -> list[FilmView]:
-    listing = _Listing(services)
+    listing = Listing(services)
     visible = visible_films(services.library.library, listing.hidden_ids, listing.show_hidden, listing.usb_allowed)
     return [
         film_view(film, listing.hidden_ids, listing.metadata.get(film.id), ART_PREFIX, services.durations.get(film.fingerprint))
@@ -78,15 +78,19 @@ def films(services: Services = Depends(get_services)) -> list[FilmView]:
 
 
 @router.get("/music/albums")
-def albums(services: Services = Depends(get_services)) -> list[AlbumView]:
-    listing = _Listing(services)
+def albums(artist: str | None = None, services: Services = Depends(get_services)) -> list[AlbumView]:
+    """All albums, or the albums of one artist."""
+    listing = Listing(services)
     visible = visible_albums(services.library.library, listing.hidden_ids, listing.show_hidden, listing.usb_allowed)
-    return [album_view(album, listing.hidden_ids, listing.metadata.get(album.id), ART_PREFIX) for album in visible]
+    views = [album_view(album, listing.hidden_ids, listing.metadata.get(album.id), ART_PREFIX) for album in visible]
+    if artist is not None:
+        views = [view for view in views if view.artist.casefold() == artist.casefold()]
+    return views
 
 
 @router.get("/music/albums/{album_id}")
 def album(album_id: str, services: Services = Depends(get_services)) -> AlbumDetailView:
-    listing = _Listing(services)
+    listing = Listing(services)
     for candidate in visible_albums(services.library.library, listing.hidden_ids, listing.show_hidden, listing.usb_allowed):
         if candidate.id == album_id:
             return album_detail_view(candidate, listing.hidden_ids, listing.metadata.get(candidate.id), ART_PREFIX)

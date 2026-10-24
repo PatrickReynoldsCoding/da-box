@@ -14,9 +14,11 @@ from dabox.limits_service import LimitsService
 from dabox.maintenance import Updater
 from dabox.metadata import MetadataService
 from dabox.models import Album, Film, Game
+from dabox.playlists import Playlists
 from dabox.store import Store
 from dabox.system import NetworkBackend
 from dabox.usb import UsbBackend, UsbStick
+from dabox.usb_copy import UsbCopier
 
 SESSION_COOKIE = "dabox_session"
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
@@ -35,6 +37,8 @@ class Services:
     guide: Guide
     limits: LimitsService
     updater: Updater
+    usb_copier: UsbCopier
+    playlists: Playlists
     core_dirs: tuple[Path, ...]
     incoming_dir: Path
     admin_port: int
@@ -63,6 +67,12 @@ def require_box_client(request: Request) -> None:
     host = request.client.host if request.client else ""
     if host not in LOOPBACK_HOSTS:
         raise HTTPException(status_code=403, detail="The box API is only available on the box")
+
+
+def require_parent_mode(request: Request) -> None:
+    """Box routes that only a parent may use on the TV (Copy from USB)."""
+    if not get_services(request).box_state.parent_mode:
+        raise HTTPException(status_code=403, detail="Only in parent mode")
 
 
 def require_admin(request: Request) -> None:

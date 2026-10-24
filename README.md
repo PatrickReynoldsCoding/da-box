@@ -9,7 +9,7 @@ See [DESIGN.md](DESIGN.md) for the full design.
 | Folder | What it is |
 |---|---|
 | `service/` | Python (FastAPI) package `dabox`: box API for the UI (localhost only), admin API + web app (PIN), library scan, settings, setup. Also `dabox.agent`, the player agent that controls mpv. |
-| `ui/` | Godot 4 box UI (Home, TV guide, channels, Films, Music, Games, first-run setup, sleeping screen). Arrow keys + Enter + Esc, or a game controller. |
+| `ui/` | Godot 4 box UI (Home, TV guide, channels, Films, Music with artists, songs, search and playlists, Games, Copy from USB, first-run setup, sleeping screen). Arrow keys + Enter + Esc, or a game controller. |
 | `install/` | `install.sh` for a Debian-based box (Raspberry Pi OS Lite, Debian 12/13, arm64 or x86_64), plus systemd, PAM, polkit and firewall files. |
 | `vm/` | `box-vm.sh`: a Debian arm64 VM on an Apple Silicon Mac (QEMU) that acts as the real box. |
 | `dev/` | `run-dev.sh` (run everything on the Mac) and `make-test-media.sh` (test films and music with ffmpeg). |
@@ -35,13 +35,15 @@ Games/<system>/<Game>.nes          systems: nes snes gb gbc gba megadrive psx
 
 The same layout works on a USB stick. Mega Drive and PlayStation need `install.sh --extra-cores`.
 
+To copy a whole drive to the box: turn on parent mode, plug the drive in, and pick the USB tile on Home. Tick folders or single items; the box checks the space, copies in the background (the box can be used meanwhile), skips items it already has, and fetches art and details at the end.
+
 ## Limits
 
 The service enforces the limits, not the UI. It checks what the player agent is doing every 2 seconds, counts video and game time, warns at 5 and 1 minutes, saves and stops games at the end of the game window, and shuts the box down after the quota is used up (once a day) and at bedtime. A video starts only if it can end before the quota (plus the overrun allowance) and bedtime. The night lasts from bedtime until 06:00. Parent mode switches all limits off. Every action is logged: `journalctl -u dabox-service | grep "Limits at"`.
 
 ## Admin app
 
-Open http://tvbox.local on a phone on the home Wi-Fi and enter the PIN. Tabs: Home (today's time, extra time, parent mode, USB sticks), Content (hide/show, art and details, copy from USB), Channels, Guide, Upload, Activity (last 7 days), Settings (limits, colour theme and sounds, TMDB key, PIN, backup and restore, system update, run setup again).
+Open http://tvbox.local on a phone on the home Wi-Fi and enter the PIN. Tabs: Home (today's time, extra time, parent mode, USB sticks), Content (hide/show, art and details, copy from USB, playlists), Channels, Guide, Upload, Activity (last 7 days), Settings (limits, colour theme and sounds, TMDB key, PIN, backup and restore, system update, run setup again).
 
 ## Run it on the Mac (dev mode)
 
@@ -52,7 +54,7 @@ dev/run-dev.sh            # service + agent + UI in a window; admin app at http:
 dev/run-dev.sh --reset    # start again from the first-run setup
 ```
 
-Dev mode uses a fake network and does not change the Mac's time zone.
+Dev mode uses a fake network and does not change the Mac's time zone. The first start makes test media with real lengths (a few minutes; `SECONDS_PER_FILM=90` for short films). Every folder in `dev/usb` acts as a USB stick.
 
 ## Run it in the VM (the real box)
 
@@ -72,6 +74,12 @@ Do not reboot the VM from inside: QEMU's firmware can fail on a warm reboot. Use
 
 ```sh
 cd service && .venv/bin/python -m pytest
+```
+
+UI key tests (no service needed): arrow keys and focus on the setup, Copy from USB and Music screens.
+
+```sh
+godot --headless --path ui res://tests/key_tests.tscn
 ```
 
 UI smoke test (needs the dev service and agent running, see `dev/run-dev.sh`): it goes through the setup and the main screens and saves screenshots.

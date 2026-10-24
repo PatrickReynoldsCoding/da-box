@@ -89,6 +89,14 @@
           <ul id="album-list" class="items"></ul>
         </div>
         <div class="card">
+          <div class="row spread">
+            <h2>Playlists</h2>
+            <button id="new-playlist">New playlist</button>
+          </div>
+          <p class="muted small">Playlists hold songs on the box (not on a USB stick). Kids can change only the playlists made on the TV.</p>
+          <ul id="playlist-list" class="items"></ul>
+        </div>
+        <div class="card">
           <h2>Games</h2>
           <p class="muted small">Put games in Games/&lt;system&gt;/ (nes, snes, gb, gbc, gba, megadrive, psx). Only systems with an emulator on the box show here.</p>
           <ul id="game-list" class="items"></ul>
@@ -325,6 +333,27 @@
       </div>
       <p class="message"></p>
     </form>
+  </dialog>
+
+  <dialog id="playlist-dialog">
+    <form method="dialog" class="dialog-close"><button class="link" aria-label="Close">Close</button></form>
+    <form id="playlist-name-form">
+      <h2 id="playlist-heading">Playlist</h2>
+      <p id="playlist-made-on" class="muted small"></p>
+      <label>Name <input name="name" maxlength="30" required></label>
+      <div class="row">
+        <button type="submit">Save name</button>
+        <button type="button" id="delete-playlist" class="danger">Delete</button>
+      </div>
+    </form>
+    <div id="playlist-songs-section">
+      <h3>Songs</h3>
+      <ul id="playlist-songs" class="plain playlist-songs"></ul>
+      <h3>Add songs</h3>
+      <label>Search <input id="song-filter" placeholder="Song, artist or album"></label>
+      <ul id="song-choices" class="candidates"></ul>
+    </div>
+    <p id="playlist-message" class="message"></p>
   </dialog>
 
   <dialog id="slot-dialog">

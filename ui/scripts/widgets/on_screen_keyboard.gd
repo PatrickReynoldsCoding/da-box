@@ -1,8 +1,9 @@
 class_name OnScreenKeyboard
 extends VBoxContainer
-## Keyboard for typing a Wi-Fi password with the controller.
+## Keyboard for typing with the controller: a Wi-Fi password (hidden), a search or a name.
 
 signal submitted(text: String)
+signal text_changed(text: String)
 
 const LETTER_ROWS := ["1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm"]
 const SYMBOL_ROWS := ["1234567890", "!@#$%^&*()", "-_=+[]{};:", "'\",.<>/?\\|`~"]
@@ -18,12 +19,19 @@ const HIDE := "Hide"
 var text := ""
 var _shift := false
 var _symbols := false
-var _hidden := true
+var _secret: bool
+var _hidden: bool
+var _max_length: int
 var _display: Label
 var _keys: VBoxContainer
 
 
-func _init() -> void:
+## `secret`: show dots, with a Show/Hide key (for passwords). `max_length` 0 means no limit.
+func _init(secret: bool = true, max_length: int = 0, initial_text: String = "") -> void:
+	_secret = secret
+	_hidden = secret
+	_max_length = max_length
+	text = initial_text
 	add_theme_constant_override("separation", 16)
 	_display = Label.new()
 	_display.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -34,6 +42,7 @@ func _init() -> void:
 	_keys.add_theme_constant_override("separation", 10)
 	add_child(_keys)
 	_build_keys()
+	_refresh_display()
 
 
 func first_button() -> Button:
@@ -48,8 +57,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if key_event.keycode == KEY_BACKSPACE:
 		_press(DELETE)
 	elif key_event.unicode >= 32 and key_event.unicode != 127:
-		text += char(key_event.unicode)
-		_refresh_display()
+		_type(char(key_event.unicode))
 	else:
 		return
 	get_viewport().set_input_as_handled()
@@ -67,7 +75,11 @@ func _build_keys() -> void:
 		for character in characters:
 			keys.append(character.to_upper() if _shift else character)
 		_add_row(keys, 96)
-	_add_row([SHIFT, LETTERS if _symbols else SYMBOLS, SPACE, DELETE, HIDE if not _hidden else SHOW, DONE], 180)
+	var bottom := [SHIFT, LETTERS if _symbols else SYMBOLS, SPACE, DELETE]
+	if _secret:
+		bottom.append(HIDE if not _hidden else SHOW)
+	bottom.append(DONE)
+	_add_row(bottom, 180)
 	if had_focus:
 		_focus_first_key.call_deferred()
 
@@ -105,14 +117,25 @@ func _press(key: String) -> void:
 			_hidden = not _hidden
 			_build_keys()
 		SPACE:
-			text += " "
+			_type(" ")
+			return
 		DELETE:
 			text = text.left(-1)
+			text_changed.emit(text)
 		DONE:
 			submitted.emit(text)
 		_:
-			text += key
+			_type(key)
+			return
 	_refresh_display()
+
+
+func _type(characters: String) -> void:
+	if _max_length > 0 and text.length() + characters.length() > _max_length:
+		return
+	text += characters
+	_refresh_display()
+	text_changed.emit(text)
 
 
 func _refresh_display() -> void:

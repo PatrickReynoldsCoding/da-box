@@ -2,7 +2,7 @@ class_name Icon
 extends Control
 ## Simple drawn icons, so the UI needs no image files or emoji font.
 
-enum Kind { TV, FILM, MUSIC, GAME, PLAY, PAUSE, NEXT, PREVIOUS, STOP }
+enum Kind { TV, FILM, MUSIC, GAME, PLAY, PAUSE, NEXT, PREVIOUS, STOP, USB }
 
 var kind: Kind
 var colour: Color
@@ -30,6 +30,7 @@ func _draw() -> void:
 		Kind.NEXT: _draw_next,
 		Kind.PREVIOUS: _draw_previous,
 		Kind.STOP: _draw_stop,
+		Kind.USB: _draw_usb,
 	}
 	drawers[kind].call(origin, unit)
 
@@ -111,3 +112,16 @@ func _draw_previous(origin: Vector2, unit: float) -> void:
 
 func _draw_stop(origin: Vector2, unit: float) -> void:
 	draw_rect(Rect2(_point(origin, unit, 2, 2), Vector2(6, 6) * unit), colour)
+
+
+## A USB stick: the plug at the top, the body below, an arrow into the box.
+func _draw_usb(origin: Vector2, unit: float) -> void:
+	draw_rect(Rect2(_point(origin, unit, 3.6, 0.6), Vector2(2.8, 2.2) * unit), colour)
+	var dark := colour.darkened(0.55)
+	draw_rect(Rect2(_point(origin, unit, 4.1, 1.1), Vector2(0.6, 0.6) * unit), dark)
+	draw_rect(Rect2(_point(origin, unit, 5.3, 1.1), Vector2(0.6, 0.6) * unit), dark)
+	draw_rect(Rect2(_point(origin, unit, 2.8, 2.8), Vector2(4.4, 6.6) * unit), colour)
+	draw_line(_point(origin, unit, 5, 4.0), _point(origin, unit, 5, 7.6), dark, unit * 0.7, true)
+	draw_colored_polygon(PackedVector2Array([
+		_point(origin, unit, 3.8, 6.8), _point(origin, unit, 6.2, 6.8), _point(origin, unit, 5, 8.4),
+	]), dark)

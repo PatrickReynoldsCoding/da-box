@@ -262,6 +262,7 @@ def scan_shows(media_dir: Path) -> list[Show]:
                 Show(
                     id=item_id("show", str(show_folder.relative_to(media_dir))),
                     title=show_folder.name,
+                    folder=show_folder,
                     art_path=find_art(show_folder),
                     episodes=episodes,
                 )

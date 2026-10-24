@@ -45,9 +45,17 @@ func _load() -> void:
 		var art_url: String = game["art_url"] if game["art_url"] is String else ""
 		var tile := PosterTile.new(game["title"], game["system_name"], art_url, UiTheme.GAMES.darkened(0.3), true, PosterTile.badge_text(game), Icon.Kind.GAME)
 		tile.set_unavailable(not open)
-		tile.pressed.connect(_play.bind(game))
+		tile.pressed.connect(_pick.bind(game))
 		_grid.add_child(tile)
 	default_focus().grab_focus()
+
+
+## In parent mode a USB game can also be copied to the box. Its saves stay (they follow the file's content).
+func _pick(game: Dictionary) -> void:
+	if Api.parent_mode() and game.get("source") == "usb":
+		open_screen.emit(UsbItemScreen.new(game["title"], game["id"], _play.bind(game)))
+	else:
+		_play(game)
 
 
 func _play(game: Dictionary) -> void:
