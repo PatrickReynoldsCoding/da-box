@@ -278,4 +278,5 @@ None at the moment (answered 2026-10-24).
 - `ui/scripts/screens/settings_screen.gd` (was `software_screen.gd`): Update da-box, Posters and info (a note until part 4), About (version, admin app addresses and QR code).
 - Update asks "Are you sure?" with **No** focused; Esc or B on the question means No.
 - Service: `/box/software/*` moved from the parent-mode router to the box router (box only, no parent mode). Tests: the TV updates without parent mode; the network still cannot.
-- Key tests: Settings opens from Home without parent mode; Update asks first with No focused; Back on the question means No.
+- Down and Up scroll the Settings screen when there is nothing to focus below or above (the text-only Posters and info and About): `key_scroll` in `ui/scripts/screens/screen.gd`, for any screen.
+- Key tests: Settings opens from Home without parent mode; Update asks first with No focused; Back on the question means No; Down scrolls to the bottom and Up back to the top.

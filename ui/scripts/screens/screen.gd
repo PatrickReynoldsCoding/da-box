@@ -5,9 +5,48 @@ extends Control
 signal open_screen(screen: Screen)
 signal close_screen
 
+## How far one Down or Up press scrolls `key_scroll` when no control there can take the focus.
+const KEY_SCROLL_STEP := 240
+
+## A scroll area with text below or above its last control (Settings). Down scrolls it when
+## there is nothing further down to focus, and Up scrolls back to the top before the focus
+## moves up out of it, so a controller can read all of it.
+var key_scroll: ScrollContainer
+
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+
+func _input(event: InputEvent) -> void:
+	if key_scroll == null or not is_visible_in_tree():
+		return
+	var down := event.is_action_pressed("ui_down", true)
+	var up := event.is_action_pressed("ui_up", true)
+	if not (down or up):
+		return
+	var focused := get_viewport().gui_get_focus_owner()
+	if focused == null or not key_scroll.is_ancestor_of(focused):
+		return
+	var bar := key_scroll.get_v_scroll_bar()
+	var bottom := bar.max_value - bar.page
+	if down and focused.find_valid_focus_neighbor(SIDE_BOTTOM) == null and key_scroll.scroll_vertical < bottom:
+		key_scroll.scroll_vertical = mini(key_scroll.scroll_vertical + KEY_SCROLL_STEP, int(bottom))
+		get_viewport().set_input_as_handled()
+	elif up and key_scroll.scroll_vertical > 0 and (not _shows_in(focused, key_scroll) or _leaves(focused, SIDE_TOP)):
+		key_scroll.scroll_vertical = maxi(key_scroll.scroll_vertical - KEY_SCROLL_STEP, 0)
+		get_viewport().set_input_as_handled()
+
+
+## True if moving the focus to that side leaves the scroll area (or there is nowhere to go).
+func _leaves(focused: Control, side: Side) -> bool:
+	var next := focused.find_valid_focus_neighbor(side)
+	return next == null or not key_scroll.is_ancestor_of(next)
+
+
+## True if the control is fully inside the scroll area's visible part.
+static func _shows_in(control: Control, scroll: ScrollContainer) -> bool:
+	return scroll.get_global_rect().encloses(control.get_global_rect())
 
 
 ## Called when the screen is shown, also when it shows again after the screen above it closes.

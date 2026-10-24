@@ -293,6 +293,20 @@ func _test_settings_update_asks_first() -> void:
 	settings.go_back()
 	await _frames()
 	_check(not settings._confirm_row.visible and _focus() == settings._update_button, "settings: Back on the question means No")
+
+	# Below Update there is only text: Down scrolls to it, Up scrolls back.
+	var scroll := settings.key_scroll
+	scroll.scroll_vertical = 0
+	await _frames()
+	var bar := scroll.get_v_scroll_bar()
+	_check(bar.max_value > bar.page, "settings: the screen is taller than the TV (the test needs a scroll)")
+	for i in 10:
+		await _press("ui_down")
+	_check(scroll.scroll_vertical >= int(bar.max_value - bar.page), "settings: Down scrolls to the bottom")
+	_check(_focus() == settings._update_button, "settings: scrolling keeps the focus on Update")
+	for i in 10:
+		await _press("ui_up")
+	_check(scroll.scroll_vertical == 0, "settings: Up scrolls back to the top")
 	await _close(settings)
 
 

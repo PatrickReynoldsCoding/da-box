@@ -49,6 +49,8 @@ func _ready() -> void:
 	sections.add_child(_make_about_section())
 	scroll.add_child(sections)
 	column.add_child(scroll)
+	# Posters and info and About are text only: Down scrolls to them.
+	key_scroll = scroll
 	page_margin(column)
 
 	_timer = Timer.new()
