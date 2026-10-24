@@ -59,16 +59,15 @@ def test_up_to_date(admin_client: TestClient, fake_http: FakeHttp, services: Ser
     assert admin_client.post("/api/admin/software/update").json()["detail"] == "da-box is up to date."
 
 
-def test_the_tv_needs_parent_mode(box_client: TestClient, completed_setup: None, services: Services, fake_http: FakeHttp) -> None:
+def test_the_tv_updates_without_parent_mode(box_client: TestClient, completed_setup: None, services: Services, fake_http: FakeHttp) -> None:
     fake_http.responses[LATEST_URL] = {"tag_name": "v9.0.0"}
-    assert box_client.get("/box/software").status_code == 403
-    assert box_client.post("/box/software/update").status_code == 403
-
-    services.box_state.set_parent_mode(True)
+    assert services.box_state.parent_mode is False
     assert box_client.post("/box/software/check").json()["available"] is True
     assert box_client.post("/box/software/update").status_code == 200
 
 
 def test_the_network_cannot_use_the_box_routes(phone_client: TestClient, services: Services) -> None:
-    services.box_state.set_parent_mode(True)
-    assert phone_client.get("/box/software").status_code == 403
+    for parent_mode in (False, True):
+        services.box_state.set_parent_mode(parent_mode)
+        assert phone_client.get("/box/software").status_code == 403
+        assert phone_client.post("/box/software/update").status_code == 403

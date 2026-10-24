@@ -115,6 +115,6 @@ def create_app(services: Services, run_workers: bool = True) -> FastAPI:
     app.include_router(usb_copy_api.box_router)
     app.include_router(usb_copy_api.parent_router)
     app.include_router(software_api.admin_router)
-    app.include_router(software_api.parent_router)
+    app.include_router(software_api.box_router)
     app.mount("/", StaticFiles(directory=ADMIN_WEB_DIR, html=True), name="admin-web")
     return app

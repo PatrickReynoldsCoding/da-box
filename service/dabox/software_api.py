@@ -1,30 +1,34 @@
-"""Updating da-box itself: from the admin app (PIN) and from the TV (parent mode only)."""
+"""Updating da-box itself: from the admin app (PIN) and from Settings on the TV.
+
+On the TV anyone may update (no parent mode): the button is in Settings, out of the kids' way.
+The box routes are for the box itself only, never for the network.
+"""
 
 import subprocess
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from dabox.services import Services, get_services, require_admin, require_box_client, require_parent_mode
+from dabox.services import Services, get_services, require_admin, require_box_client
 from dabox.software_update import SoftwareStatus
 
 admin_router = APIRouter(prefix="/api/admin", dependencies=[Depends(require_admin)])
-parent_router = APIRouter(prefix="/box", dependencies=[Depends(require_box_client), Depends(require_parent_mode)])
+box_router = APIRouter(prefix="/box", dependencies=[Depends(require_box_client)])
 
 
 @admin_router.get("/software")
-@parent_router.get("/software")
+@box_router.get("/software")
 def software_status(services: Services = Depends(get_services)) -> SoftwareStatus:
     return services.software.status()
 
 
 @admin_router.post("/software/check")
-@parent_router.post("/software/check")
+@box_router.post("/software/check")
 def check_software(services: Services = Depends(get_services)) -> SoftwareStatus:
     return services.software.status(check=True)
 
 
 @admin_router.post("/software/update")
-@parent_router.post("/software/update")
+@box_router.post("/software/update")
 def start_software_update(services: Services = Depends(get_services)) -> SoftwareStatus:
     status = services.software.status()
     if status.running:
