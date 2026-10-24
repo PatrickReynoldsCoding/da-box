@@ -9,3 +9,4 @@ ui/.godot/
 .DS_Store
 dev/usb/
 vm/work-*/
+.idea/

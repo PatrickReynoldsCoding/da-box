@@ -3,11 +3,16 @@ extends Control
 ## watches the box state (setup needed, parent mode).
 
 const STATE_POLL_SECONDS := 3.0
+const TOAST_SECONDS := 12.0
 
 var _stack: Array[Screen] = []
 var _layer: Control
 var _parent_badge: Label
 var _warning: Label
+var _toast: Label
+var _toast_timer: Timer
+## The last Copy from USB job whose end the TV has shown (-1: none seen yet).
+var _announced_copy := -1
 
 
 func _ready() -> void:
@@ -22,7 +27,14 @@ func _ready() -> void:
 	add_child(_parent_badge)
 	_warning = _make_warning()
 	add_child(_warning)
+	_toast = _make_toast()
+	add_child(_toast)
+	_toast_timer = Timer.new()
+	_toast_timer.one_shot = true
+	_toast_timer.timeout.connect(func() -> void: _toast.visible = false)
+	add_child(_toast_timer)
 	Api.limits_changed.connect(_on_limits_changed)
+	Api.copy_changed.connect(_on_copy_changed)
 
 	Api.state_changed.connect(_on_state_changed)
 	var timer := Timer.new()
@@ -45,6 +57,7 @@ func _poll_state() -> void:
 	var reachable := await Api.refresh_state()
 	if reachable and not Api.state.get("setup_required", true):
 		await Api.refresh_limits()
+		await Api.refresh_copy()
 	if not reachable and not (_top() is ConnectingScreen):
 		_replace_all(ConnectingScreen.new())
 	elif reachable and _top() is ConnectingScreen:
@@ -72,6 +85,39 @@ func _on_limits_changed(limits: Dictionary) -> void:
 	elif not shutting_down and _top() is SleepingScreen:
 		# The parent gave extra time.
 		_replace_all(HomeScreen.new())
+
+
+## When a Copy from USB ends, say so on the TV (and over a film or game, through the agent).
+func _on_copy_changed(progress: Dictionary) -> void:
+	if progress.is_empty():
+		return
+	var job := int(progress.get("job_id", 0))
+	var ended: bool = progress.get("state") in ["done", "stopped", "failed"]
+	if _announced_copy < 0:
+		# The first look after start-up: a result from before is not news.
+		_announced_copy = job - 1 if progress.get("state") == "copying" else job
+		return
+	if not ended or job <= _announced_copy:
+		return
+	_announced_copy = job
+	var message: String = progress.get("message") if progress.get("message") is String else "The copy from USB ended."
+	var colour := UiTheme.GOOD if progress.get("state") == "done" else UiTheme.WARNING
+	_toast.add_theme_stylebox_override("normal", UiTheme.rounded_box(colour, 24, 20))
+	_toast.text = message
+	_toast.visible = true
+	_toast_timer.start(TOAST_SECONDS)
+	Api.agent_post("/notify", {"message": message.left(200)})
+
+
+func _make_toast() -> Label:
+	var label := Label.new()
+	label.add_theme_font_size_override("font_size", 36)
+	label.add_theme_color_override("font_color", UiTheme.BACKGROUND_TOP)
+	label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM, Control.PRESET_MODE_MINSIZE, 40)
+	label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	label.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	label.visible = false
+	return label
 
 
 func _make_warning() -> Label:
@@ -140,7 +186,8 @@ func _focus_default(screen: Screen) -> void:
 	if screen.has_meta("last_focus"):
 		remembered = screen.get_meta("last_focus")
 		screen.remove_meta("last_focus")
-	if remembered is Control and is_instance_valid(remembered) and remembered.is_visible_in_tree():
+	# The remembered control may be gone (a list that loaded again), so check that first.
+	if is_instance_valid(remembered) and remembered is Control and remembered.is_visible_in_tree():
 		remembered.grab_focus()
 		return
 	var target := screen.default_focus()

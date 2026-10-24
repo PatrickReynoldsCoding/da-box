@@ -216,7 +216,165 @@ async function loadContent() {
   const gameList = $("#game-list");
   gameList.replaceChildren(...games.map((game) => itemRow(game, game.system_name, "album-art", "game")));
   gameList.classList.toggle("empty", games.length === 0);
+  await loadPlaylists();
 }
+
+// ---- Playlists ----
+
+const PLAYLIST_CHOICES_LIMIT = 50;
+let editingPlaylist = null;
+let boxSongs = [];
+
+function songLabel(song) {
+  return `${song.title} — ${song.artist}`;
+}
+
+function playlistRow(playlist) {
+  const row = document.createElement("li");
+  const info = document.createElement("div");
+  info.className = "info";
+  const title = document.createElement("div");
+  title.textContent = playlist.name;
+  const sub = document.createElement("div");
+  sub.className = "sub";
+  const count = `${playlist.song_count} song${playlist.song_count === 1 ? "" : "s"}`;
+  sub.textContent = `${count} · ${playlist.made_on === "box" ? "made on the TV" : "made here"}`;
+  info.append(title, sub);
+  row.append(info);
+  row.addEventListener("click", () => openPlaylist(playlist.id));
+  return row;
+}
+
+async function loadPlaylists() {
+  const playlists = await api("/music/playlists");
+  $("#playlist-list").replaceChildren(...playlists.map(playlistRow));
+  $("#playlist-list").classList.toggle("empty", playlists.length === 0);
+}
+
+async function openPlaylist(playlistId) {
+  [editingPlaylist, boxSongs] = await Promise.all([
+    playlistId ? api(`/music/playlists/${playlistId}`) : null,
+    api("/music/songs"),
+  ]);
+  $("#song-filter").value = "";
+  renderPlaylist();
+  setMessage($("#playlist-message"), "");
+  $("#playlist-dialog").showModal();
+}
+
+function renderPlaylist() {
+  const playlist = editingPlaylist;
+  $("#playlist-name-form").name.value = playlist?.name ?? "";
+  $("#playlist-heading").textContent = playlist ? playlist.name : "New playlist";
+  $("#playlist-made-on").textContent = playlist
+    ? (playlist.made_on === "box" ? "Made on the TV. Kids can change it." : "Made here. Kids can play it but not change it.")
+    : "Give it a name first, then add songs.";
+  $("#delete-playlist").hidden = !playlist;
+  $("#playlist-songs-section").hidden = !playlist;
+  if (!playlist) return;
+
+  const ids = playlist.songs.map((song) => song.id);
+  const rows = playlist.songs.map((song, index) => {
+    const row = document.createElement("li");
+    const title = document.createElement("span");
+    title.className = "title";
+    title.textContent = songLabel(song);
+    if (song.hidden) {
+      const badge = document.createElement("span");
+      badge.className = "badge";
+      badge.textContent = "Hidden";
+      title.append(badge);
+    }
+    const move = (offset) => {
+      const order = [...ids];
+      [order[index], order[index + offset]] = [order[index + offset], order[index]];
+      return setPlaylistSongs(order);
+    };
+    row.append(
+      title,
+      smallButton("↑", "Move up", index === 0, () => move(-1)),
+      smallButton("↓", "Move down", index === ids.length - 1, () => move(1)),
+      smallButton("Remove", "Remove from the playlist", false, () => setPlaylistSongs(ids.filter((id) => id !== song.id))),
+    );
+    return row;
+  });
+  $("#playlist-songs").replaceChildren(...rows);
+  $("#playlist-songs").classList.toggle("empty", rows.length === 0);
+  renderSongChoices();
+}
+
+function smallButton(text, label, disabled, action) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "secondary";
+  button.textContent = text;
+  button.setAttribute("aria-label", label);
+  button.disabled = disabled;
+  button.addEventListener("click", action);
+  return button;
+}
+
+function renderSongChoices() {
+  const onList = new Set(editingPlaylist?.songs.map((song) => song.id) ?? []);
+  const needle = $("#song-filter").value.trim().toLowerCase();
+  const matches = boxSongs.filter((song) => !onList.has(song.id)
+    && (!needle || `${song.title} ${song.artist} ${song.album}`.toLowerCase().includes(needle)));
+  const rows = matches.slice(0, PLAYLIST_CHOICES_LIMIT).map((song) => {
+    const row = document.createElement("li");
+    const info = document.createElement("div");
+    const title = document.createElement("div");
+    title.textContent = song.title;
+    const sub = document.createElement("div");
+    sub.className = "sub";
+    sub.textContent = `${song.artist} · ${song.album}`;
+    info.append(title, sub);
+    row.append(info);
+    row.addEventListener("click", () => playlistAction(() => api(`/music/playlists/${editingPlaylist.id}/songs`, {
+      method: "POST", body: { song_id: song.id },
+    })));
+    return row;
+  });
+  if (matches.length > PLAYLIST_CHOICES_LIMIT) {
+    const more = document.createElement("li");
+    more.className = "muted";
+    more.textContent = `${matches.length - PLAYLIST_CHOICES_LIMIT} more. Type to find them.`;
+    rows.push(more);
+  }
+  $("#song-choices").replaceChildren(...rows);
+}
+
+function setPlaylistSongs(songIds) {
+  return playlistAction(() => api(`/music/playlists/${editingPlaylist.id}/songs`, { method: "PUT", body: { song_ids: songIds } }));
+}
+
+async function playlistAction(action) {
+  try {
+    editingPlaylist = await action();
+    renderPlaylist();
+    setMessage($("#playlist-message"), "");
+    loadPlaylists();
+  } catch (error) {
+    setMessage($("#playlist-message"), describeValidationError(error), "error");
+  }
+}
+
+$("#new-playlist").addEventListener("click", () => openPlaylist(null));
+$("#song-filter").addEventListener("input", renderSongChoices);
+
+$("#playlist-name-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const name = event.target.name.value;
+  playlistAction(() => (editingPlaylist
+    ? api(`/music/playlists/${editingPlaylist.id}`, { method: "PUT", body: { name } })
+    : api("/music/playlists", { method: "POST", body: { name } })));
+});
+
+$("#delete-playlist").addEventListener("click", async () => {
+  if (!editingPlaylist || !confirm(`Delete the playlist "${editingPlaylist.name}"?`)) return;
+  await api(`/music/playlists/${editingPlaylist.id}`, { method: "DELETE" });
+  $("#playlist-dialog").close();
+  loadPlaylists();
+});
 
 $("#rescan").addEventListener("click", async () => {
   renderContent(await api("/rescan", { method: "POST" }));
@@ -522,8 +680,8 @@ $("#copy-to-box").addEventListener("click", async () => {
   itemMessage("Copying… this can take a few minutes for a film.");
   $("#copy-to-box").disabled = true;
   try {
-    const content = await api(`/content/${openItemId}/copy-to-box`, { method: "POST" });
-    renderContent(content);
+    await api(`/content/${openItemId}/copy-to-box`, { method: "POST" });
+    await loadContent();
     itemMessage("Copied to the box.", "ok");
     $("#copy-section").hidden = true;
   } catch (error) {

@@ -130,23 +130,24 @@ def _day_bounds(services: Services, day: date) -> tuple[datetime, datetime]:
     return start, start + timedelta(days=1)
 
 
-def _guide_day(services: Services, day: date | None, art_prefix: str, include_gaps: bool, kid_view: bool) -> GuideDayView:
+def _guide_day(services: Services, day: date | None) -> GuideDayView:
+    """One day of every channel, for the TV guide on the box. Gaps and hidden programmes are left out."""
     guide = services.guide
     now = guide.now().replace(microsecond=0)
     day = day or now.date()
     day_start, day_end = _day_bounds(services, day)
     guide.ensure_week(day_start)
     slots = guide.slots_between(day_start, day_end)
-    hidden_ids = services.store.hidden_item_ids() if kid_view and not services.box_state.parent_mode else set()
+    hidden_ids = services.store.hidden_item_ids() if not services.box_state.parent_mode else set()
 
     channels: list[ChannelDayView] = []
     for channel in guide.channels():
         views = [
-            slot_view(slot, art_prefix)
+            slot_view(slot, "/box/art")
             for slot in slots
             if slot.channel_id == channel.id
-            and (slot.programme is not None or include_gaps)
-            and not (slot.programme and slot.programme.hide_id in hidden_ids)
+            and slot.programme is not None
+            and slot.programme.hide_id not in hidden_ids
         ]
         channels.append(ChannelDayView(id=channel.id, number=channel.number, name=channel.name, kind=channel.kind, slots=views))
 
@@ -171,7 +172,7 @@ def _guide_error(error: GuideError) -> HTTPException:
 
 @box_router.get("/guide")
 def box_guide(day: date | None = None, services: Services = Depends(get_services)) -> GuideDayView:
-    return _guide_day(services, day, "/box/art", include_gaps=False, kid_view=True)
+    return _guide_day(services, day)
 
 
 @box_router.get("/channels/{channel_id}/now")
@@ -275,16 +276,11 @@ def programme_choices(kind: ChannelKind, services: Services = Depends(get_servic
     return choices
 
 
-@admin_router.get("/guide")
-def admin_guide(day: date | None = None, services: Services = Depends(get_services)) -> GuideDayView:
-    return _guide_day(services, day, "/api/admin/art", include_gaps=True, kid_view=False)
-
-
 @admin_router.post("/guide/generate")
-def generate_guide(day: date | None = None, services: Services = Depends(get_services)) -> GuideDayView:
+def generate_guide(day: date | None = None, services: Services = Depends(get_services)) -> None:
+    """"Fill again": fills the week that contains `day` again, keeping the parent's changes."""
     start, _ = _day_bounds(services, day or services.guide.now().date())
     services.guide.generate(start)
-    return admin_guide(day, services)
 
 
 @admin_router.get("/guide/week")

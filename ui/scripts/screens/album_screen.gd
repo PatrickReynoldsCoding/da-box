@@ -1,6 +1,7 @@
 class_name AlbumScreen
 extends Screen
-## One album: cover on the left, "Play all" and the tracks on the right.
+## One album: cover on the left, "Play all", "Shuffle" and the tracks on the right.
+## In parent mode, an album on a USB stick also has "Copy to the box".
 
 var _album_id: String
 var _album: Dictionary = {}
@@ -8,6 +9,7 @@ var _cover: TextureRect
 var _title: Label
 var _artist: Label
 var _tracks: VBoxContainer
+var _copy_button: Button
 var _message: Label
 
 
@@ -33,6 +35,11 @@ func _ready() -> void:
 	left.add_child(_title)
 	_artist = UiTheme.muted_label("", UiTheme.FONT_SIZE)
 	left.add_child(_artist)
+	_copy_button = Button.new()
+	_copy_button.text = "Copy to the box"
+	_copy_button.visible = false
+	_copy_button.pressed.connect(_copy_to_box)
+	left.add_child(_copy_button)
 	row.add_child(left)
 
 	var scroll := ScrollContainer.new()
@@ -69,30 +76,51 @@ func _load() -> void:
 	if _album["art_url"] is String:
 		_cover.texture = await Api.texture(_album["art_url"])
 
-	_tracks.add_child(_track_button("Play all", 0, UiTheme.MUSIC))
+	_copy_button.visible = _album["source"] == "usb" and Api.parent_mode()
+	_tracks.add_child(_track_button("Play all", _play.bind(0), UiTheme.MUSIC))
+	_tracks.add_child(_track_button("Shuffle", _shuffle, UiTheme.MUSIC.darkened(0.25)))
 	var number := 1
 	for track in _album["tracks"]:
-		_tracks.add_child(_track_button("%d.  %s" % [number, track["title"]], number - 1, Color(1, 1, 1, 0.08)))
+		_tracks.add_child(_track_button("%d.  %s" % [number, track["title"]], _play.bind(number - 1), Color(1, 1, 1, 0.08)))
 		number += 1
 	default_focus().grab_focus()
 
 
-func _track_button(text: String, start_index: int, colour: Color) -> Button:
+func _track_button(text: String, action: Callable, colour: Color) -> Button:
 	var button := Button.new()
 	button.text = text
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.custom_minimum_size.y = 90
 	button.add_theme_stylebox_override("normal", UiTheme.rounded_box(colour, 20))
-	button.pressed.connect(_play.bind(start_index))
+	button.pressed.connect(action)
 	return button
 
 
-func _play(start_index: int) -> void:
-	var items := []
+## The tracks as songs for Api.play_songs.
+func _songs() -> Array:
+	var songs := []
 	for track in _album["tracks"]:
-		items.append({"path": track["path"], "title": track["title"], "artist": track["artist"]})
-	var reply := await Api.agent_post("/play", {"kind": "audio", "items": items, "start_index": start_index})
-	if reply.ok:
+		songs.append({"id": track["id"], "path": track["path"], "title": track["title"], "artist": track["artist"], "source": _album["source"]})
+	return songs
+
+
+func _play(start_index: int, songs: Array = []) -> void:
+	if await Api.play_songs(songs if not songs.is_empty() else _songs(), start_index):
 		open_screen.emit(NowPlayingScreen.new(_album.get("art_url", "")))
 	else:
 		_message.text = "This music would not play."
+
+
+func _shuffle() -> void:
+	var songs := _songs()
+	songs.shuffle()
+	_play(0, songs)
+
+
+func _copy_to_box() -> void:
+	var reply := await Api.service_post("/box/content/%s/copy-to-box" % _album_id)
+	if reply.ok:
+		Api.refresh_copy()
+		open_screen.emit(CopyProgressScreen.new())
+	else:
+		_message.text = Api.error_text(reply, "The album could not be copied.")

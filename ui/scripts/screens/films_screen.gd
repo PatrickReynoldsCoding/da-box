@@ -39,7 +39,7 @@ func _load() -> void:
 		var badge := PosterTile.badge_text(film)
 		var tile := PosterTile.new(film["title"], year_text, _text_or_empty(film["art_url"]), UiTheme.FILMS.darkened(0.3), false, badge)
 		tile.set_unavailable(not Api.video_fits(_film_seconds(film)))
-		tile.pressed.connect(_play.bind(film))
+		tile.pressed.connect(_pick.bind(film))
 		_grid.add_child(tile)
 	default_focus().grab_focus()
 
@@ -47,6 +47,14 @@ func _load() -> void:
 ## Films with an unknown length count as 90 minutes, to be safe.
 static func _film_seconds(film: Dictionary) -> float:
 	return film["seconds"] if film.get("seconds") != null else 90.0 * 60.0
+
+
+## In parent mode a USB film can also be copied to the box.
+func _pick(film: Dictionary) -> void:
+	if Api.parent_mode() and film.get("source") == "usb":
+		open_screen.emit(UsbItemScreen.new(film["title"], film["id"], _play.bind(film)))
+	else:
+		_play(film)
 
 
 func _play(film: Dictionary) -> void:

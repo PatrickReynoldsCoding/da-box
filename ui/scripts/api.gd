@@ -5,12 +5,17 @@ extends Node
 signal state_changed(state: Dictionary)
 ## Emitted after each limits refresh (time left, games open, warnings, shut-down).
 signal limits_changed(limits: Dictionary)
+## Emitted after each refresh of the Copy from USB job.
+signal copy_changed(progress: Dictionary)
 
 var service_url := "http://127.0.0.1:80"
 var agent_url := "http://127.0.0.1:8091"
+## Key tests set this: every request fails at once, without the network.
+var offline := false
 
 var state: Dictionary = {}
 var limits: Dictionary = {}
+var copy_progress: Dictionary = {}
 var _texture_cache: Dictionary = {}
 
 
@@ -42,6 +47,14 @@ func service_get(path: String) -> Reply:
 
 func service_post(path: String, body: Variant = {}) -> Reply:
 	return await _request(service_url + path, HTTPClient.METHOD_POST, body)
+
+
+func service_put(path: String, body: Variant = {}) -> Reply:
+	return await _request(service_url + path, HTTPClient.METHOD_PUT, body)
+
+
+func service_delete(path: String) -> Reply:
+	return await _request(service_url + path, HTTPClient.METHOD_DELETE, null)
 
 
 func agent_get(path: String) -> Reply:
@@ -92,6 +105,49 @@ func refresh_limits() -> void:
 		limits_changed.emit(limits)
 
 
+func refresh_copy() -> void:
+	var reply := await service_get("/box/usb/copy")
+	if reply.ok:
+		copy_progress = reply.data
+		copy_changed.emit(copy_progress)
+
+
+## The service's error text ("detail"), or the fallback.
+static func error_text(reply: Reply, fallback: String) -> String:
+	if reply.data is Dictionary and reply.data.get("detail") is String:
+		return reply.data["detail"]
+	return fallback
+
+
+func copy_running() -> bool:
+	return copy_progress.get("state") == "copying"
+
+
+## Plays songs from the music API in this order. Box songs carry their id, so
+## Now playing can add them to a playlist (USB songs cannot go on one).
+func play_songs(songs: Array, start_index: int = 0) -> bool:
+	var items := []
+	for song in songs:
+		items.append({
+			"path": song["path"], "title": song["title"], "artist": song["artist"],
+			"song_id": song["id"] if song.get("source") == "box" else null,
+		})
+	var reply := await agent_post("/play", {"kind": "audio", "items": items, "start_index": start_index})
+	return reply.ok
+
+
+## "1.4 GB", "350 MB".
+static func size_text(bytes: float) -> String:
+	var units := ["bytes", "KB", "MB", "GB", "TB"]
+	var unit := 0
+	while bytes >= 1000.0 and unit < units.size() - 1:
+		bytes /= 1000.0
+		unit += 1
+	if unit == 0:
+		return "%d bytes" % int(bytes)
+	return ("%.1f %s" if bytes < 10.0 else "%d %s") % [bytes, units[unit]]
+
+
 ## Seconds of box-local wall-clock time, for comparing times from the service.
 static func wall_seconds(iso_time: Variant) -> float:
 	return Time.get_unix_time_from_datetime_string(iso_time) if iso_time is String else 0.0
@@ -122,6 +178,8 @@ static func minutes_text(seconds: float) -> String:
 
 
 func _request(url: String, method: HTTPClient.Method, body: Variant) -> Reply:
+	if offline:
+		return Reply.new(false, 0, null)
 	var http := HTTPRequest.new()
 	add_child(http)
 	var headers := PackedStringArray()
@@ -142,6 +200,8 @@ func _request(url: String, method: HTTPClient.Method, body: Variant) -> Reply:
 
 
 func _request_bytes(url: String) -> PackedByteArray:
+	if offline:
+		return PackedByteArray()
 	var http := HTTPRequest.new()
 	add_child(http)
 	if http.request(url) != OK:

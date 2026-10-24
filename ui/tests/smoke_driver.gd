@@ -105,6 +105,8 @@ func _run_main_screens() -> void:
 	await _wait(1.5)
 	await _shot("after-stop")
 	await _run_tv()
+	await _run_music_menu()
+	await _run_copy_from_usb()
 
 
 func _run_tv() -> void:
@@ -130,6 +132,91 @@ func _run_tv() -> void:
 	await _press("ui_cancel")
 	await _wait(1.5)
 	await _shot("tv-back-to-guide")
+
+
+func _go_home() -> bool:
+	for i in 6:
+		if get_tree().root.find_child("FilmsTile", true, false) is Control and (get_tree().root.find_child("FilmsTile", true, false) as Control).is_visible_in_tree():
+			return true
+		await _press("ui_cancel")
+		await _wait(0.4)
+	return false
+
+
+func _open_home_tile(tile_name: String) -> bool:
+	if not await _go_home():
+		print("%s skipped: no Home screen (night or quota used up?)" % tile_name)
+		return false
+	var tile := get_tree().root.find_child(tile_name, true, false) as Control
+	if tile == null or not tile.is_visible_in_tree():
+		return false
+	tile.grab_focus()
+	await _press("ui_accept")
+	await _wait(2.0)
+	return true
+
+
+func _run_music_menu() -> void:
+	if not await _open_home_tile("MusicTile"):
+		return
+	await _shot("music-albums")
+	for section in ["Artists", "Songs", "Playlists"]:
+		await _focus_and_press_button(section)
+		await _wait(1.0)
+		await _shot("music-" + section.to_lower())
+	# Make a playlist with the on-screen keyboard (a real keyboard types too).
+	var new_tile := _buttons_with_text("").filter(func(button: Button) -> bool: return button is PosterTile)
+	if not new_tile.is_empty():
+		(new_tile[0] as Control).grab_focus()
+		await _press("ui_accept")
+		await _wait(0.8)
+		for character in "Favourites":
+			await _key(OS.find_keycode_from_string(character.to_upper()), character.unicode_at(0))
+		await _shot("music-name-playlist")
+		await _focus_and_press_button("Done")
+		await _wait(1.5)
+		await _shot("music-new-playlist")
+		await _press("ui_cancel")
+		await _wait(1.0)
+	await _focus_and_press_button("Songs")
+	await _wait(1.0)
+	await _focus_and_press_button("+")
+	await _wait(1.0)
+	await _shot("music-add-to-playlist")
+	await _focus_and_press_button("Favourites")
+	await _wait(1.5)
+	await _focus_and_press_button("Search")
+	await _wait(0.8)
+	for character in "tone":
+		await _key(OS.find_keycode_from_string(character.to_upper()), character.unicode_at(0))
+	await _wait(1.0)
+	await _shot("music-search")
+
+
+func _run_copy_from_usb() -> void:
+	if not Api.parent_mode():
+		print("Copy from USB part skipped: parent mode is off (turn it on in the admin app)")
+		return
+	if not await _open_home_tile("USBTile"):
+		return
+	await _shot("usb-tree")
+	await _press("ui_accept")
+	await _press("ui_right")
+	await _press("ui_accept")
+	await _wait(0.5)
+	await _shot("usb-tree-ticked")
+	await _focus_and_press_button("Copy")
+	await _wait(1.0)
+	await _shot("usb-progress")
+	for i in 60:
+		if not Api.copy_running():
+			break
+		await _wait(0.5)
+	await _wait(1.5)
+	await _shot("usb-done")
+	await _go_home()
+	await _wait(3.5)
+	await _shot("home-after-copy")
 
 
 # ---- Helpers ----

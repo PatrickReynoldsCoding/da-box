@@ -90,7 +90,7 @@ There are no other buttons. Every screen works with these inputs only.
 2. **TV guide.** Video channels, music channels and a "Game Time" row. A "Bedtime" line. Programmes that cannot finish in the time left are greyed out.
 3. **Channel playback.** Starts at the current point in the schedule. Up and Down change the channel.
 4. **Films.** Poster grid. Films that cannot finish in the time left are greyed out.
-5. **Music.** Albums, artists, shuffle and "Now playing" with album art.
+5. **Music.** A menu row: Albums, Artists, Songs, Playlists, Search, Shuffle all. "Now playing" with album art. Kids and the parent make playlists (songs on the box only).
 6. **Games.** Box art grid. Greyed out when games are closed. "Continue" loads the last save.
 7. **Warnings.** At 5 minutes and 1 minute before the game window ends or bedtime.
 8. **TV is sleeping.** After the quota or bedtime.
@@ -184,7 +184,7 @@ The admin app shows the list of supported game folder names, for example `nes`, 
 - The parent can hide a USB item. The box remembers it by the file's fingerprint (hash), so it stays hidden the next time.
 - Game saves for USB games are stored **on the box**, keyed by the file's fingerprint.
 - The quota and all other rules apply to USB items.
-- The admin app can copy USB items to the box permanently.
+- The admin app can copy USB items to the box permanently. In parent mode the box itself can copy a whole drive, or ticked items, in the background ("Copy from USB", see DESIGN_CORRECTIONS_1.md).
 
 ## 9. Metadata
 
