@@ -171,3 +171,27 @@ class FakeUpdater:
 
     def status(self) -> UpdateStatus:
         return UpdateStatus(running=False, last_result="OK" if self.started else None, log=["Dev mode: nothing was updated."] if self.started else [])
+
+
+# ---- Removing da-box ----
+
+class Remover(Protocol):
+    def start(self, purge: bool) -> None: ...
+
+
+class SystemdRemover:
+    """Starts dabox-remove@keep.service or dabox-remove@purge.service (root). It runs
+    install/uninstall.sh (installed as /opt/dabox/bin/dabox-uninstall) and restarts the
+    machine into plain Linux. This service stops on the way, so nothing reports back."""
+
+    def start(self, purge: bool) -> None:
+        unit = f"dabox-remove@{'purge' if purge else 'keep'}.service"
+        subprocess.run(["systemctl", "start", "--no-block", unit], check=True, timeout=30)
+
+
+class FakeRemover:
+    def __init__(self) -> None:
+        self.started: list[bool] = []
+
+    def start(self, purge: bool) -> None:
+        self.started.append(purge)

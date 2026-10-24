@@ -109,7 +109,7 @@ The box shows the first-run setup on the TV. After the setup, open http://tvbox.
 
 **On a machine with a desktop** (Mint, Ubuntu, Raspberry Pi OS with desktop) the box takes the place of the desktop: the installer turns off the login screen (LightDM, GDM, ...) and ufw/firewalld, and asks you to restart at the end instead of starting the kiosk over the running desktop. Without a working GPU driver it uses software rendering. With an NVIDIA driver, if the screen stays black after the restart, run the installer again with `--vm`.
 
-To get the desktop back: `sudo install/uninstall.sh` (add `--purge` to also delete the code, media, settings and users), then restart.
+To get the desktop back: in the admin app, Settings → **Remove da-box** (asks for the PIN and the word REMOVE, then restarts into Linux). Or by hand: `sudo install/uninstall.sh` (add `--purge` to also delete the code, media, settings and users), then restart. Both give the machine its old name and start-up target back (saved by `install.sh` from this version on).
 
 **If the screen is black and there is no SSH** (tried on a real Linux Mint laptop):
 

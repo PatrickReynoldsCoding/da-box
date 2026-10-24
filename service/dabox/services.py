@@ -11,7 +11,7 @@ from dabox.channels import Guide
 from dabox.durations import Durations
 from dabox.library import LibraryIndex
 from dabox.limits_service import LimitsService
-from dabox.maintenance import Updater
+from dabox.maintenance import Remover, Updater
 from dabox.metadata import MetadataService
 from dabox.models import Album, Film, Game
 from dabox.playlists import Playlists
@@ -39,6 +39,7 @@ class Services:
     limits: LimitsService
     updater: Updater
     software: SoftwareUpdates
+    remover: Remover
     usb_copier: UsbCopier
     playlists: Playlists
     core_dirs: tuple[Path, ...]

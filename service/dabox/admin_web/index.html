@@ -262,6 +262,17 @@
           <p class="muted">Run the first-run setup on the TV again. The box shows the setup screens until it is complete.</p>
           <button id="rerun-setup" class="danger">Run setup again</button>
         </div>
+
+        <form id="remove-form" class="card">
+          <h2>Remove da-box</h2>
+          <p class="muted">Gives this machine back as plain Linux: da-box stops, the desktop login screen and the machine's old name come back, and it restarts. You cannot undo this from here; to use da-box again, install it again.</p>
+          <label class="check"><input type="radio" name="mode" value="keep" checked> Remove da-box, keep the media (films, music and games stay in /srv/dabox/media)</label>
+          <label class="check"><input type="radio" name="mode" value="purge"> Remove everything: also delete the media, settings and the box's users</label>
+          <label>PIN <input name="pin" type="password" inputmode="numeric" autocomplete="off" required></label>
+          <label>Type REMOVE to confirm <input name="confirm" autocomplete="off" autocapitalize="characters" required></label>
+          <button type="submit" class="danger">Remove da-box</button>
+          <p class="message"></p>
+        </form>
       </div>
     </section>
   </main>

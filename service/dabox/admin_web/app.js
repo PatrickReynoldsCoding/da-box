@@ -1260,6 +1260,25 @@ $("#software-update").addEventListener("click", async () => {
   }
 });
 
+// ---- Remove da-box ----
+
+$("#remove-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.target;
+  const purge = form.mode.value === "purge";
+  const what = purge ? "da-box and ALL its media, settings and users" : "da-box (the media stays)";
+  if (!confirm(`Remove ${what}? The machine restarts into plain Linux.`)) return;
+  try {
+    await api("/remove-dabox", { method: "POST", body: { pin: form.pin.value, confirm: form.confirm.value, purge } });
+    form.querySelector("button").disabled = true;
+    setMessage($(".message", form), "da-box is being removed. The machine restarts into Linux in about a minute. This page stops working.", "ok");
+  } catch (error) {
+    setMessage($(".message", form), error.message, "error");
+  } finally {
+    form.pin.value = "";
+  }
+});
+
 // ---- Accounts ----
 
 async function loadAccounts() {

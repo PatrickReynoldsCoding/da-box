@@ -188,6 +188,8 @@ install_code() {
   install -m 0755 "$templates/dabox-session" "$INSTALL_DIR/bin/dabox-session"
   install -m 0755 "$templates/dabox-update" "$INSTALL_DIR/bin/dabox-update"
   install -m 0755 "$templates/dabox-upgrade" "$INSTALL_DIR/bin/dabox-upgrade"
+  # For "Remove da-box" in the admin app (dabox-remove@.service).
+  install -m 0755 "$repo/install/uninstall.sh" "$INSTALL_DIR/bin/dabox-uninstall"
   installed_version > "$INSTALL_DIR/VERSION"
 
   # A venv from an older Python (or a broken one after a distro upgrade) is made again.
@@ -347,11 +349,12 @@ install_system_files() {
   install -m 0644 "$templates/dabox-kiosk.service" /etc/systemd/system/dabox-kiosk.service
   install -m 0644 "$templates/dabox-update.service" /etc/systemd/system/dabox-update.service
   install -m 0644 "$templates/dabox-upgrade.service" /etc/systemd/system/dabox-upgrade.service
+  install -m 0644 "$templates/dabox-remove@.service" /etc/systemd/system/dabox-remove@.service
   install -m 0644 "$templates/pam-dabox-kiosk" /etc/pam.d/dabox-kiosk
   install -d /etc/polkit-1/rules.d
   install -m 0644 "$templates/50-dabox.rules" /etc/polkit-1/rules.d/50-dabox.rules
   if ! polkit_has_js_rules; then
-    warn "This polkit is older than 0.106. The admin app works, except 'System update' and 'Update da-box'."
+    warn "This polkit is older than 0.106. The admin app works, except 'System update', 'Update da-box' and 'Remove da-box'."
     install -d /etc/polkit-1/localauthority/50-local.d
     install -m 0644 "$templates/50-dabox.pkla" /etc/polkit-1/localauthority/50-local.d/50-dabox.pkla
   fi
@@ -446,6 +449,12 @@ lock_down_consoles() {
 
 set_hostname() {
   step "Naming the box $HOSTNAME_FOR_BOX (admin app: http://$HOSTNAME_FOR_BOX.local)"
+  # uninstall.sh gives the machine its old name back. Saved once, before the first rename.
+  local old_name
+  old_name="$(hostnamectl --static 2>/dev/null || hostname)"
+  if [[ ! -s "$CONFIG_DIR/hostname-before" && $old_name != "$HOSTNAME_FOR_BOX" ]]; then
+    echo "$old_name" > "$CONFIG_DIR/hostname-before"
+  fi
   hostnamectl set-hostname "$HOSTNAME_FOR_BOX"
   if grep -q '^127\.0\.1\.1[[:space:]]' /etc/hosts; then
     sed -i "s/^127\.0\.1\.1[[:space:]].*/127.0.1.1 $HOSTNAME_FOR_BOX/" /etc/hosts
@@ -465,6 +474,7 @@ enable_services() {
   systemctl enable --now avahi-daemon systemd-timesyncd >/dev/null 2>&1 || true
   systemctl restart avahi-daemon >/dev/null 2>&1 || true
   systemctl enable nftables dabox-service dabox-kiosk
+  [[ -s "$CONFIG_DIR/target-before" ]] || systemctl get-default > "$CONFIG_DIR/target-before"
   systemctl set-default graphical.target
   systemctl restart nftables
   systemctl restart dabox-service
