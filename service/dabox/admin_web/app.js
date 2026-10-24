@@ -460,6 +460,7 @@ async function loadSettings() {
   loadAccounts();
   loadAppearance();
   loadUpdateStatus();
+  loadSoftwareStatus();
   const limits = await api("/settings");
   const form = $("#settings-form");
   form.daily_quota_minutes.value = limits.daily_quota_minutes;
@@ -1204,6 +1205,58 @@ $("#start-update").addEventListener("click", async () => {
     renderUpdate(await api("/system-update", { method: "POST" }));
   } catch (error) {
     $("#update-status").textContent = error.message;
+  }
+});
+
+let softwarePoll = null;
+
+function renderSoftware(status) {
+  const latest = status.latest ? ` · newest release: ${status.latest}` : "";
+  $("#software-version").textContent = `Installed: ${status.installed}${latest}`;
+  $("#software-update").hidden = !status.available || status.running;
+  $("#software-update").textContent = `Update to ${status.latest}`;
+  $("#software-check").disabled = status.running;
+  let text;
+  if (status.running) text = "Updating da-box… this can take some minutes. The TV restarts at the end.";
+  else if (status.check_error) text = status.check_error;
+  else if (status.available) text = "A new version is ready to install.";
+  else if (status.latest) text = "da-box is up to date.";
+  else text = "";
+  if (!status.running && status.last_result) text += ` Last update: ${status.last_result}.`;
+  $("#software-status").textContent = text;
+  $("#software-log").hidden = status.log.length === 0;
+  $("#software-log").textContent = status.log.join("\n");
+  clearTimeout(softwarePoll);
+  if (status.running) softwarePoll = setTimeout(loadSoftwareStatus, 3000);
+}
+
+async function loadSoftwareStatus() {
+  try {
+    renderSoftware(await api("/software"));
+  } catch (error) {
+    if (error.status === 401) return;
+    // The service restarts near the end of an update. Keep asking until it is back.
+    $("#software-status").textContent = "Waiting for the box to come back…";
+    clearTimeout(softwarePoll);
+    softwarePoll = setTimeout(loadSoftwareStatus, 3000);
+  }
+}
+
+$("#software-check").addEventListener("click", async () => {
+  $("#software-status").textContent = "Checking…";
+  try {
+    renderSoftware(await api("/software/check", { method: "POST" }));
+  } catch (error) {
+    $("#software-status").textContent = error.message;
+  }
+});
+
+$("#software-update").addEventListener("click", async () => {
+  if (!confirm("Update da-box now? What is playing on the TV stops, and the TV restarts at the end. It can take some minutes.")) return;
+  try {
+    renderSoftware(await api("/software/update", { method: "POST" }));
+  } catch (error) {
+    $("#software-status").textContent = error.message;
   }
 });
 

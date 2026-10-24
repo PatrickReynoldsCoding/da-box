@@ -1,8 +1,11 @@
 [Unit]
 Description=da-box kiosk (cage + box UI) on tty1
-After=systemd-user-sessions.service dabox-service.service plymouth-quit-wait.service
+After=systemd-user-sessions.service systemd-logind.service dabox-service.service plymouth-quit.service plymouth-quit-wait.service
 Wants=dabox-service.service
 Conflicts=getty@tty1.service
+# Never give up: at boot the GPU driver can load after the first start, and a box with
+# a failed kiosk only shows a black screen.
+StartLimitIntervalSec=0
 
 [Service]
 User=kid
@@ -19,9 +22,11 @@ UtmpIdentifier=tty1
 UtmpMode=user
 EnvironmentFile=/etc/dabox/kiosk.env
 # -d: no window decorations. No -s, so Ctrl+Alt+F<n> cannot switch to another console.
+# Wait (up to 30 s) until logind has a screen for the seat: the GPU driver can load late.
+ExecStartPre=/bin/sh -c 'for i in $$(seq 30); do [ "$$(loginctl show-seat seat0 -p CanGraphical --value 2>/dev/null)" = yes ] && exit 0; sleep 1; done; exit 0'
 ExecStart=/usr/bin/cage -d -- /opt/dabox/bin/dabox-session
 Restart=always
-RestartSec=1
+RestartSec=2
 
 [Install]
 WantedBy=graphical.target

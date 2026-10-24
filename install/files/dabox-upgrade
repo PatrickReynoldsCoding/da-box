@@ -1,0 +1,54 @@
+#!/bin/bash
+# Updates da-box itself to the newest GitHub release. Started by the parent from the TV or the
+# admin app (dabox-upgrade.service). It downloads the release's source and runs its
+# install/install.sh with the options the box was installed with (/etc/dabox/update.env).
+# The firewall opens only while this runs; install.sh writes it again at the end.
+set -euo pipefail
+
+CONFIG_DIR="/etc/dabox"
+INSTALL_DIR="/opt/dabox"
+WORK_DIR="/var/cache/dabox/releases"
+
+# Everything is in functions: install.sh replaces this file while it runs.
+main() {
+  DABOX_UPDATE_REPO="PatrickReynoldsCoding/da-box"
+  DABOX_INSTALL_OPTIONS=""
+  # shellcheck source=/dev/null
+  [[ -r "$CONFIG_DIR/update.env" ]] && . "$CONFIG_DIR/update.env"
+  local installed latest archive source
+  installed="$(cat "$INSTALL_DIR/VERSION" 2>/dev/null || echo unknown)"
+
+  echo "Opening the firewall for the update."
+  trap close_firewall EXIT
+  nft delete table inet dabox 2>/dev/null || true
+
+  latest="$(curl -sSfL --retry 2 "https://api.github.com/repos/$DABOX_UPDATE_REPO/releases/latest" |
+    python3 -c 'import json, sys; print(json.load(sys.stdin)["tag_name"])')"
+  [[ $latest =~ ^[A-Za-z0-9._-]+$ ]] || { echo "Unexpected release name: $latest" >&2; exit 1; }
+  if [[ $latest == "$installed" ]]; then
+    echo "da-box $installed is the newest release. Nothing to do."
+    exit 0
+  fi
+
+  echo "Updating da-box from $installed to $latest."
+  rm -rf "$WORK_DIR"
+  install -d -m 0700 "$WORK_DIR"
+  archive="$WORK_DIR/$latest.tar.gz"
+  source="$WORK_DIR/$latest"
+  curl -sSfL --retry 2 -o "$archive" "https://github.com/$DABOX_UPDATE_REPO/archive/refs/tags/$latest.tar.gz"
+  install -d "$source"
+  tar -xzf "$archive" -C "$source" --strip-components=1 --no-same-owner
+  [[ -f "$source/install/install.sh" ]] || { echo "The release has no install/install.sh." >&2; exit 1; }
+
+  # shellcheck disable=SC2086  # the saved options are separate words
+  DABOX_VERSION="$latest" bash "$source/install/install.sh" $DABOX_INSTALL_OPTIONS
+  rm -f "$archive"
+  echo "Update finished: da-box $latest."
+}
+
+close_firewall() {
+  echo "Closing the firewall again."
+  systemctl restart nftables
+}
+
+main "$@"; exit

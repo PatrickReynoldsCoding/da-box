@@ -25,6 +25,7 @@ func _run() -> void:
 	await _test_copy_tick_list()
 	await _test_music_menu()
 	await _test_music_screens_open()
+	await _test_controller_buttons()
 	print("Key tests: %d checks, %d failed" % [_checks, _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
 
@@ -230,6 +231,39 @@ static func _album(id: String, title: String) -> Dictionary:
 static func _song(id: String, title: String, source: String) -> Dictionary:
 	return {"id": id, "title": title, "artist": "Band", "album": "Album", "album_id": "a1", "path": "/x.mp3",
 		"art_url": null, "source": source, "stick_label": null, "hidden": false}
+
+
+# ---- Controllers: A presses, B and Back/Select go back (any controller) ----
+
+func _test_controller_buttons() -> void:
+	preload("res://scripts/main.gd").add_controller_buttons()
+	for device in [0, 3]:
+		_check(_joy_event(JOY_BUTTON_A, device).is_action_pressed("ui_accept"), "controller %d: A is ui_accept" % device)
+		_check(_joy_event(JOY_BUTTON_B, device).is_action_pressed("ui_cancel"), "controller %d: B is ui_cancel" % device)
+		_check(_joy_event(JOY_BUTTON_BACK, device).is_action_pressed("ui_cancel"), "controller %d: Back is ui_cancel" % device)
+	_check(not _joy_event(JOY_BUTTON_X, 0).is_action_pressed("ui_accept"), "controller: X is not ui_accept")
+
+	var button := Button.new()
+	button.text = "Press me"
+	_layer.add_child(button)
+	var presses := [0]
+	button.pressed.connect(func() -> void: presses[0] += 1)
+	button.grab_focus()
+	await _frames()
+	get_viewport().push_input(_joy_event(JOY_BUTTON_A, 0))
+	get_viewport().push_input(_joy_event(JOY_BUTTON_A, 0, false))
+	await _frames()
+	_check(presses[0] == 1, "controller: A presses the focused button")
+	button.queue_free()
+	await _frames()
+
+
+func _joy_event(button: JoyButton, device: int, pressed: bool = true) -> InputEventJoypadButton:
+	var event := InputEventJoypadButton.new()
+	event.button_index = button
+	event.device = device
+	event.pressed = pressed
+	return event
 
 
 func _show(screen: Screen) -> void:

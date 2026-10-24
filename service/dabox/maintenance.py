@@ -126,20 +126,24 @@ _UPDATE_UNIT = "dabox-update.service"
 
 
 class SystemdUpdater:
-    """Starts dabox-update.service (root). It opens the firewall, upgrades the
-    Debian packages, and closes the firewall again (install/files/dabox-update)."""
+    """Starts a root update unit and reports on it. dabox-update.service (the default) opens
+    the firewall, upgrades the Debian packages, and closes the firewall again
+    (install/files/dabox-update). dabox-upgrade.service updates da-box itself."""
+
+    def __init__(self, unit: str = _UPDATE_UNIT) -> None:
+        self._unit = unit
 
     def start(self) -> None:
-        subprocess.run(["systemctl", "start", "--no-block", _UPDATE_UNIT], check=True, timeout=30)
+        subprocess.run(["systemctl", "start", "--no-block", self._unit], check=True, timeout=30)
 
     def status(self) -> UpdateStatus:
         show = subprocess.run(
-            ["systemctl", "show", "-p", "ActiveState", "-p", "Result", "-p", "ExecMainStatus", _UPDATE_UNIT],
+            ["systemctl", "show", "-p", "ActiveState", "-p", "Result", "-p", "ExecMainStatus", self._unit],
             capture_output=True, text=True, timeout=10,
         ).stdout
         values = dict(line.split("=", 1) for line in show.splitlines() if "=" in line)
         journal = subprocess.run(
-            ["journalctl", "-u", _UPDATE_UNIT, "-n", "15", "-o", "short", "--no-pager", "-q"],
+            ["journalctl", "-u", self._unit, "-n", "15", "-o", "short", "--no-pager", "-q"],
             capture_output=True, text=True, timeout=10,
         ).stdout.splitlines()
         return UpdateStatus(

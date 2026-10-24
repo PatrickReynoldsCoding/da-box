@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from dabox import admin_api, box_api, guide_api, limits_api, maintenance_api, music_api, usb_copy_api
+from dabox import admin_api, box_api, guide_api, limits_api, maintenance_api, music_api, software_api, usb_copy_api
 from dabox.activity import ActivityLog
 from dabox.auth import AdminAuth
 from dabox.background import BackgroundWorkers
@@ -18,6 +18,7 @@ from dabox.limits_service import AgentClient, FakePower, HttpAgentClient, Limits
 from dabox.maintenance import FakeUpdater, SystemdUpdater, Updater
 from dabox.metadata import HttpClient, MetadataService, MetadataStore, UrllibClient
 from dabox.playlists import Playlists
+from dabox.software_update import SOFTWARE_UNIT, SoftwareUpdates
 from dabox.services import Services
 from dabox.store import Store
 from dabox.system import (
@@ -51,6 +52,7 @@ def build_services(
     durations = Durations(store)
     guide = Guide(store, library, durations, lambda: box_state.timezone)
     metadata_store = MetadataStore(store, config.data_dir / "art")
+    software_runner = FakeUpdater() if config.dev_mode else SystemdUpdater(SOFTWARE_UNIT)
     return Services(
         store=store,
         auth=auth,
@@ -63,6 +65,7 @@ def build_services(
         guide=guide,
         limits=LimitsService(UsageStore(store), box_state, guide.now, agent, power, ActivityLog(store)),
         updater=updater,
+        software=SoftwareUpdates(http_client, config.version_file, config.update_repo, software_runner),
         usb_copier=UsbCopier(usb, config.media_dir, store, metadata_store),
         playlists=Playlists(store),
         core_dirs=config.core_dirs,
@@ -111,5 +114,7 @@ def create_app(services: Services, run_workers: bool = True) -> FastAPI:
     app.include_router(music_api.admin_router)
     app.include_router(usb_copy_api.box_router)
     app.include_router(usb_copy_api.parent_router)
+    app.include_router(software_api.admin_router)
+    app.include_router(software_api.parent_router)
     app.mount("/", StaticFiles(directory=ADMIN_WEB_DIR, html=True), name="admin-web")
     return app

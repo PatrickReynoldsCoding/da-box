@@ -5,3 +5,4 @@
 (^|\.)archive\.org$
 (^|\.)libretro\.com$
 (^|\.)screenscraper\.fr$
+^api\.github\.com$

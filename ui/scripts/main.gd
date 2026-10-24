@@ -18,6 +18,7 @@ var _announced_copy := -1
 func _ready() -> void:
 	if "--hide-cursor" in OS.get_cmdline_user_args():
 		Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
+	add_controller_buttons()
 	theme = UiTheme.build()
 	add_child(BubblesBackground.new())
 	_layer = Control.new()
@@ -45,6 +46,24 @@ func _ready() -> void:
 
 	_replace_all(ConnectingScreen.new())
 	_poll_state()
+
+
+## Godot's built-in ui_accept and ui_cancel have keys only, so a controller could move but not
+## press anything. A (the bottom face button) is Enter; B (the right one) and Back/Select are Esc.
+## Godot names buttons by position, so this is the same on Xbox, PlayStation and 8BitDo pads.
+static func add_controller_buttons() -> void:
+	var buttons := {
+		"ui_accept": [JOY_BUTTON_A],
+		"ui_cancel": [JOY_BUTTON_B, JOY_BUTTON_BACK],
+	}
+	for action: String in buttons:
+		for button: JoyButton in buttons[action]:
+			var event := InputEventJoypadButton.new()
+			event.button_index = button
+			# device -1: every controller, also one plugged in later.
+			event.device = -1
+			if not InputMap.action_has_event(action, event):
+				InputMap.action_add_event(action, event)
 
 
 func _unhandled_input(event: InputEvent) -> void:

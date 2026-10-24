@@ -18,6 +18,8 @@ var _copy_label: Label
 var _copy_progress: ProgressBar
 var _clock: Label
 var _leave_parent_mode: Button
+## Leave parent mode, Update da-box.
+var _parent_buttons: HBoxContainer
 
 
 func _ready() -> void:
@@ -60,11 +62,18 @@ func _ready() -> void:
 	bottom.add_child(mascot)
 	column.add_child(bottom)
 
+	_parent_buttons = HBoxContainer.new()
+	_parent_buttons.alignment = BoxContainer.ALIGNMENT_CENTER
+	_parent_buttons.add_theme_constant_override("separation", 30)
 	_leave_parent_mode = Button.new()
 	_leave_parent_mode.text = "Leave parent mode"
-	_leave_parent_mode.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_leave_parent_mode.pressed.connect(_on_leave_parent_mode)
-	column.add_child(_leave_parent_mode)
+	_parent_buttons.add_child(_leave_parent_mode)
+	var update_button := Button.new()
+	update_button.text = "Update da-box"
+	update_button.pressed.connect(func() -> void: open_screen.emit(SoftwareScreen.new()))
+	_parent_buttons.add_child(update_button)
+	column.add_child(_parent_buttons)
 
 	page_margin(column)
 	Api.state_changed.connect(_on_state_changed)
@@ -106,8 +115,9 @@ func _on_limits_changed(limits: Dictionary) -> void:
 
 func _on_state_changed(state: Dictionary) -> void:
 	var parent: bool = state.get("parent_mode", false)
-	_leave_parent_mode.visible = parent
-	if not parent and _usb_tile.has_focus():
+	_parent_buttons.visible = parent
+	var focused := get_viewport().gui_get_focus_owner()
+	if not parent and focused != null and (focused == _usb_tile or _parent_buttons.is_ancestor_of(focused)):
 		_games_tile.grab_focus()
 	_usb_tile.visible = parent
 	for tile in [_tv_tile, _films_tile, _music_tile, _games_tile, _usb_tile]:
