@@ -1,0 +1,8 @@
+[Unit]
+Description=Remove da-box and restart into plain Linux (%i: keep or purge the media)
+# Started from the admin app (Settings, Remove da-box): dabox-remove@keep or dabox-remove@purge.
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'if [ "%i" = purge ]; then exec /opt/dabox/bin/dabox-uninstall --purge --reboot; else exec /opt/dabox/bin/dabox-uninstall --reboot; fi'
+TimeoutStartSec=600

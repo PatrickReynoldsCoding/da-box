@@ -15,7 +15,7 @@ from dabox.config import ServiceConfig
 from dabox.library import LibraryIndex
 from dabox.limits import UsageStore
 from dabox.limits_service import AgentClient, FakePower, HttpAgentClient, LimitsService, PowerBackend, SystemdPower
-from dabox.maintenance import FakeUpdater, SystemdUpdater, Updater
+from dabox.maintenance import FakeRemover, FakeUpdater, SystemdRemover, SystemdUpdater, Updater
 from dabox.metadata import HttpClient, MetadataService, MetadataStore, UrllibClient
 from dabox.playlists import Playlists
 from dabox.software_update import SOFTWARE_UNIT, SoftwareUpdates
@@ -66,6 +66,7 @@ def build_services(
         limits=LimitsService(UsageStore(store), box_state, guide.now, agent, power, ActivityLog(store)),
         updater=updater,
         software=SoftwareUpdates(http_client, config.version_file, config.update_repo, software_runner),
+        remover=FakeRemover() if config.dev_mode else SystemdRemover(),
         usb_copier=UsbCopier(usb, config.media_dir, store, metadata_store),
         playlists=Playlists(store),
         core_dirs=config.core_dirs,

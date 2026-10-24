@@ -57,3 +57,30 @@ def test_update_result() -> None:
     assert update_result({"ActiveState": "inactive", "Result": "success"}, []) is None
     assert update_result({"ActiveState": "inactive", "Result": "success", "ExecMainStatus": "0"}, ["done"]) == "OK"
     assert update_result({"ActiveState": "failed", "Result": "exit-code", "ExecMainStatus": "100"}, ["E: x"]).startswith("Failed")
+
+
+def test_remove_dabox_needs_the_word_and_the_pin(admin_client: TestClient, services: Services) -> None:
+    from tests.conftest import TEST_PIN
+
+    remove = lambda **body: admin_client.post("/api/admin/remove-dabox", json={"pin": TEST_PIN, "confirm": "REMOVE", **body})
+    assert remove(confirm="remove please").status_code == 422
+    assert remove(pin="0000").status_code == 403
+    assert services.remover.started == []
+
+    assert remove().json() == {"removing": True, "purge": False}
+    assert remove(purge=True).json()["purge"] is True
+    assert services.remover.started == [False, True]
+    # Re-entering the PIN does not log the parent out of the admin app.
+    assert admin_client.get("/api/admin/system-update").status_code == 200
+
+
+def test_remove_dabox_wrong_pins_lock_out(admin_client: TestClient, services: Services) -> None:
+    statuses = [admin_client.post("/api/admin/remove-dabox", json={"pin": "0000", "confirm": "REMOVE"}).status_code for _ in range(8)]
+    assert statuses[-1] == 423
+    assert services.remover.started == []
+
+
+def test_remove_dabox_needs_the_admin_app(phone_client: TestClient, completed_setup: None) -> None:
+    from tests.conftest import TEST_PIN
+
+    assert phone_client.post("/api/admin/remove-dabox", json={"pin": TEST_PIN, "confirm": "REMOVE"}).status_code == 401

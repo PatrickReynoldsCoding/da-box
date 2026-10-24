@@ -15,7 +15,7 @@ Found on a real Linux Mint laptop (2026-10-24) with a 1 TB Toshiba USB disk (exF
 | 5. USB drive check (why a drive shows nothing) | Spec | With 1 |
 | 6. Tests for many kinds of USB drive | Spec | Start now |
 | 7. Settings screen on the box (Update da-box, Posters and info) | Done, tried on the laptop. Posters and info is a placeholder until part 4 | Part 4 |
-| 8. Remove da-box from the admin app (back to plain Linux) | Spec, decided | Next |
+| 8. Remove da-box from the admin app (back to plain Linux) | Done, tests in the repo | Try it on the laptop (it removes da-box) |
 
 Already fixed in PR #3 (merged): the box did not see the disk at all (flat `lsblk` output), and it mounted it where the kid user cannot read it (`ID_BUS=ata`).
 
@@ -280,3 +280,11 @@ None at the moment (answered 2026-10-24).
 - Service: `/box/software/*` moved from the parent-mode router to the box router (box only, no parent mode). Tests: the TV updates without parent mode; the network still cannot.
 - Down and Up scroll the Settings screen when there is nothing to focus below or above (the text-only Posters and info and About): `key_scroll` in `ui/scripts/screens/screen.gd`, for any screen.
 - Key tests: Settings opens from Home without parent mode; Update asks first with No focused; Back on the question means No; Down scrolls to the bottom and Up back to the top.
+
+**Part 8, Remove da-box (2026-10-24): done**, not yet tried on a real machine.
+- Admin app: Settings → Remove da-box (last card): keep the media or remove everything, the PIN again and the word REMOVE, then a browser "Are you sure?".
+- Service: `POST /api/admin/remove-dabox` (`maintenance_api.py`). A wrong PIN here counts towards the login lockout. It starts `dabox-remove@keep` or `dabox-remove@purge` (`SystemdRemover` in `maintenance.py`), which polkit allows for the service user only.
+- `install.sh` installs `uninstall.sh` as `/opt/dabox/bin/dabox-uninstall` and the unit `dabox-remove@.service`, and saves the machine's name (`/etc/dabox/hostname-before`) and default target (`/etc/dabox/target-before`) before it changes them.
+- `uninstall.sh`: new `--reboot`; gives the name and target back; runs from functions, so `--purge` can delete it while it runs.
+- Tests: the word, the PIN, the lockout, keep and purge (fake runner), the admin login. The polkit rule checked with node. The new restore steps dry-run with fake commands.
+- A machine renamed to `tvbox` by an older install (the Mint laptop) has no saved old name: it stays `tvbox` after removal. Rename it with `sudo hostnamectl set-hostname <name>`.

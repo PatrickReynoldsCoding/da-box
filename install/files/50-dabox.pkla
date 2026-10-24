@@ -1,5 +1,5 @@
 # For polkit older than 0.106 (Ubuntu 22.04, Linux Mint 21), which does not read 50-dabox.rules.
-# The same permissions, except starting dabox-update.service and dabox-upgrade.service: a .pkla
+# The same permissions, except starting dabox-update, dabox-upgrade and dabox-remove@: a .pkla
 # file cannot limit that to one unit.
 [da-box service]
 Identity=unix-user:tvbox

@@ -1,12 +1,14 @@
 // The da-box service (user tvbox) may set up Wi-Fi, set the time zone, power off
-// the box, mount USB sticks, and start the system update and the da-box update (only those units).
+// the box, mount USB sticks, start the system update and the da-box update, and remove da-box
+// (only those units).
 polkit.addRule(function (action, subject) {
   if (subject.user !== "tvbox") {
     return polkit.Result.NOT_HANDLED;
   }
   if (action.id === "org.freedesktop.systemd1.manage-units") {
     var unit = action.lookup("unit");
-    var startsUpdate = (unit === "dabox-update.service" || unit === "dabox-upgrade.service") && action.lookup("verb") === "start";
+    var units = ["dabox-update.service", "dabox-upgrade.service", "dabox-remove@keep.service", "dabox-remove@purge.service"];
+    var startsUpdate = units.indexOf(unit) >= 0 && action.lookup("verb") === "start";
     return startsUpdate ? polkit.Result.YES : polkit.Result.NOT_HANDLED;
   }
   var allowed = action.id.indexOf("org.freedesktop.NetworkManager.") === 0 ||

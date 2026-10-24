@@ -76,7 +76,7 @@ button.danger { background: var(--danger); color: #fff; }
 button.link { background: none; color: inherit; text-decoration: underline; padding: 0; }
 button:disabled { opacity: 0.5; cursor: default; }
 
-input:not([type="checkbox"]) {
+input:not([type="checkbox"]):not([type="radio"]) {
   font: inherit;
   width: 100%;
   padding: 10px;
