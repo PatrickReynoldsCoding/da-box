@@ -135,6 +135,8 @@ install_packages() {
     die "These packages are not in this system's package sources: ${missing[*]}.$hint"
   fi
   local wanted=("${required[@]}")
+  # --keep-ssh needs an SSH server, and desktop distros (Linux Mint) do not install one.
+  $keep_ssh && wanted+=(openssh-server)
   for package in "${optional[@]}"; do
     if package_available "$package"; then wanted+=("$package"); else warn "$package is not available here; skipping it."; fi
   done
@@ -433,7 +435,9 @@ lock_down_consoles() {
     systemctl mask "getty@$tty.service" >/dev/null 2>&1 || true
   done
   systemctl mask autovt@.service >/dev/null 2>&1 || true
-  if ! $keep_ssh; then
+  if $keep_ssh; then
+    systemctl enable --now ssh.service >/dev/null 2>&1 || true
+  else
     # The serial console and SSH stay only on development boxes. Ubuntu starts SSH from ssh.socket.
     systemctl mask serial-getty@ttyAMA0.service serial-getty@ttyS0.service >/dev/null 2>&1 || true
     systemctl disable --now ssh.socket ssh.service >/dev/null 2>&1 || true
