@@ -129,7 +129,7 @@ Other Linux families (Fedora, Arch, openSUSE) are not supported: the installer s
 
 ## Update da-box
 
-In parent mode, Home on the TV has **Update da-box**; the admin app has the same under Settings → *da-box version*. Both show the installed version and the newest [GitHub release](https://github.com/PatrickReynoldsCoding/da-box/releases), and install it on request: `dabox-upgrade.service` (root) opens the firewall, downloads the release's source, and runs its `install/install.sh` with the options saved at install time (`/etc/dabox/update.env`). Settings, media and users stay. The TV restarts at the end. The log: `journalctl -u dabox-upgrade`.
+On the TV, the small **Settings** button at the bottom right of Home has **Update da-box** (no parent mode needed; it asks "Are you sure?" first). The admin app has the same under Settings → *da-box version*. Both show the installed version and the newest [GitHub release](https://github.com/PatrickReynoldsCoding/da-box/releases), and install it on request: `dabox-upgrade.service` (root) opens the firewall, downloads the release's source, and runs its `install/install.sh` with the options saved at install time (`/etc/dabox/update.env`). Settings, media and users stay. The TV restarts at the end. The log: `journalctl -u dabox-upgrade`.
 
 The box only sees **releases**, not branches. To publish one from `main`:
 

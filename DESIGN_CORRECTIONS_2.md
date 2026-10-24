@@ -14,7 +14,7 @@ Found on a real Linux Mint laptop (2026-10-24) with a 1 TB Toshiba USB disk (exF
 | 4. Posters and info on the box: keys, fetch, fix | Spec, decided | After 7 |
 | 5. USB drive check (why a drive shows nothing) | Spec | With 1 |
 | 6. Tests for many kinds of USB drive | Spec | Start now |
-| 7. Settings screen on the box (Update da-box, Posters and info) | Spec, decided. Changes Update da-box (PR #2) | Next |
+| 7. Settings screen on the box (Update da-box, Posters and info) | Done, tried on the laptop. Posters and info is a placeholder until part 4 | Part 4 |
 | 8. Remove da-box from the admin app (back to plain Linux) | Spec, decided | Next |
 
 Already fixed in PR #3 (merged): the box did not see the disk at all (flat `lsblk` output), and it mounted it where the kid user cannot read it (`ID_BUS=ata`).
@@ -270,3 +270,13 @@ A way to give the machine back as plain Linux, without a terminal. Only in the *
 ## Open questions
 
 None at the moment (answered 2026-10-24).
+
+## Status notes
+
+**Part 7, Settings screen (2026-10-24): done**, tried on the Mint laptop: Settings opens from Home, and Down and Up scroll it.
+- Home: a small Settings button (gear) at the bottom right, next to the mascot, with or without parent mode. Update da-box left the parent-mode row.
+- `ui/scripts/screens/settings_screen.gd` (was `software_screen.gd`): Update da-box, Posters and info (a note until part 4), About (version, admin app addresses and QR code).
+- Update asks "Are you sure?" with **No** focused; Esc or B on the question means No.
+- Service: `/box/software/*` moved from the parent-mode router to the box router (box only, no parent mode). Tests: the TV updates without parent mode; the network still cannot.
+- Down and Up scroll the Settings screen when there is nothing to focus below or above (the text-only Posters and info and About): `key_scroll` in `ui/scripts/screens/screen.gd`, for any screen.
+- Key tests: Settings opens from Home without parent mode; Update asks first with No focused; Back on the question means No; Down scrolls to the bottom and Up back to the top.

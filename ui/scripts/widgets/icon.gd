@@ -2,7 +2,7 @@ class_name Icon
 extends Control
 ## Simple drawn icons, so the UI needs no image files or emoji font.
 
-enum Kind { TV, FILM, MUSIC, GAME, PLAY, PAUSE, NEXT, PREVIOUS, STOP, USB }
+enum Kind { TV, FILM, MUSIC, GAME, PLAY, PAUSE, NEXT, PREVIOUS, STOP, USB, GEAR }
 
 var kind: Kind
 var colour: Color
@@ -31,6 +31,7 @@ func _draw() -> void:
 		Kind.PREVIOUS: _draw_previous,
 		Kind.STOP: _draw_stop,
 		Kind.USB: _draw_usb,
+		Kind.GEAR: _draw_gear,
 	}
 	drawers[kind].call(origin, unit)
 
@@ -125,3 +126,16 @@ func _draw_usb(origin: Vector2, unit: float) -> void:
 	draw_colored_polygon(PackedVector2Array([
 		_point(origin, unit, 3.8, 6.8), _point(origin, unit, 6.2, 6.8), _point(origin, unit, 5, 8.4),
 	]), dark)
+
+
+## A gear (Settings): eight teeth round a wheel with a hole.
+func _draw_gear(origin: Vector2, unit: float) -> void:
+	var centre := _point(origin, unit, 5, 5)
+	for tooth in 8:
+		var direction := Vector2.from_angle(tooth * TAU / 8.0)
+		var side := direction.orthogonal() * unit * 0.8
+		var inner := centre + direction * unit * 2.8
+		var outer := centre + direction * unit * 4.4
+		draw_colored_polygon(PackedVector2Array([inner - side, outer - side, outer + side, inner + side]), colour)
+	draw_circle(centre, unit * 3.3, colour)
+	draw_circle(centre, unit * 1.3, colour.darkened(0.55))

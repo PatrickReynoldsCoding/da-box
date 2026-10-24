@@ -18,8 +18,7 @@ var _copy_label: Label
 var _copy_progress: ProgressBar
 var _clock: Label
 var _leave_parent_mode: Button
-## Leave parent mode, Update da-box.
-var _parent_buttons: HBoxContainer
+var _settings_button: Button
 
 
 func _ready() -> void:
@@ -60,20 +59,16 @@ func _ready() -> void:
 	bottom.alignment = BoxContainer.ALIGNMENT_END
 	var mascot := Mascot.new()
 	bottom.add_child(mascot)
+	# The small Settings button at the bottom right, out of the kids' way.
+	_settings_button = _make_settings_button()
+	bottom.add_child(_settings_button)
 	column.add_child(bottom)
 
-	_parent_buttons = HBoxContainer.new()
-	_parent_buttons.alignment = BoxContainer.ALIGNMENT_CENTER
-	_parent_buttons.add_theme_constant_override("separation", 30)
 	_leave_parent_mode = Button.new()
 	_leave_parent_mode.text = "Leave parent mode"
+	_leave_parent_mode.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_leave_parent_mode.pressed.connect(_on_leave_parent_mode)
-	_parent_buttons.add_child(_leave_parent_mode)
-	var update_button := Button.new()
-	update_button.text = "Update da-box"
-	update_button.pressed.connect(func() -> void: open_screen.emit(SoftwareScreen.new()))
-	_parent_buttons.add_child(update_button)
-	column.add_child(_parent_buttons)
+	column.add_child(_leave_parent_mode)
 
 	page_margin(column)
 	Api.state_changed.connect(_on_state_changed)
@@ -115,9 +110,8 @@ func _on_limits_changed(limits: Dictionary) -> void:
 
 func _on_state_changed(state: Dictionary) -> void:
 	var parent: bool = state.get("parent_mode", false)
-	_parent_buttons.visible = parent
-	var focused := get_viewport().gui_get_focus_owner()
-	if not parent and focused != null and (focused == _usb_tile or _parent_buttons.is_ancestor_of(focused)):
+	_leave_parent_mode.visible = parent
+	if not parent and (_usb_tile.has_focus() or _leave_parent_mode.has_focus()):
 		_games_tile.grab_focus()
 	_usb_tile.visible = parent
 	for tile in [_tv_tile, _films_tile, _music_tile, _games_tile, _usb_tile]:
@@ -170,6 +164,33 @@ func _on_copy_changed(progress: Dictionary) -> void:
 		_copy_progress.visible = false
 		var message: Variant = progress.get("message")
 		_copy_label.text = message if message is String else ""
+
+
+func _make_settings_button() -> Button:
+	var button := Button.new()
+	button.custom_minimum_size = Vector2(240, 76)
+	button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	button.pressed.connect(func() -> void: open_screen.emit(SettingsScreen.new()))
+	var inside := HBoxContainer.new()
+	inside.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 10)
+	inside.alignment = BoxContainer.ALIGNMENT_CENTER
+	inside.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	inside.add_theme_constant_override("separation", 12)
+	var gear := Icon.new(Icon.Kind.GEAR, UiTheme.TEXT_MUTED, 44.0)
+	inside.add_child(gear)
+	var label := UiTheme.muted_label("Settings")
+	label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	inside.add_child(label)
+	button.add_child(inside)
+	# Dark on the yellow focus box, like the text of other buttons.
+	var recolour := func(colour: Color) -> void:
+		gear.colour = colour
+		gear.queue_redraw()
+		label.add_theme_color_override("font_color", colour)
+	button.focus_entered.connect(recolour.bind(UiTheme.BACKGROUND_TOP))
+	button.focus_exited.connect(recolour.bind(UiTheme.TEXT_MUTED))
+	return button
 
 
 func _on_leave_parent_mode() -> void:

@@ -26,6 +26,8 @@ func _run() -> void:
 	await _test_music_menu()
 	await _test_music_screens_open()
 	await _test_controller_buttons()
+	await _test_home_settings_button()
+	await _test_settings_update_asks_first()
 	print("Key tests: %d checks, %d failed" % [_checks, _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
 
@@ -256,6 +258,56 @@ func _test_controller_buttons() -> void:
 	_check(presses[0] == 1, "controller: A presses the focused button")
 	button.queue_free()
 	await _frames()
+
+
+# ---- Settings (DESIGN_CORRECTIONS_2.md, part 7) ----
+
+func _test_home_settings_button() -> void:
+	var home := HomeScreen.new()
+	await _show(home)
+	_check(home._settings_button.visible, "home: Settings shows without parent mode")
+	var opened: Array = []
+	home.open_screen.connect(func(screen: Screen) -> void: opened.append(screen))
+	home._settings_button.grab_focus()
+	await _press("ui_accept")
+	_check(opened.size() == 1 and opened[0] is SettingsScreen, "home: Settings opens the Settings screen")
+	for screen in opened:
+		screen.free()
+	await _close(home)
+
+
+func _test_settings_update_asks_first() -> void:
+	var settings := SettingsScreen.new()
+	await _show(settings)
+	_check(_focus() == settings._back_button, "settings: starts on Back")
+	var api_script: GDScript = load("res://scripts/api.gd")
+	settings._show(api_script.Reply.new(true, 200, {
+		"installed": "v0.1.0", "latest": "v0.2.0", "available": true, "running": false,
+		"check_error": null, "last_result": null, "log": []}))
+	await _frames()
+	_check(settings._update_button.visible and settings._update_button.text == "Update to v0.2.0", "settings: shows Update to the newest release")
+
+	settings._update_button.grab_focus()
+	await _press("ui_accept")
+	_check(settings._confirm_row.visible and _focus() == settings._confirm_no, "settings: Update asks first, with No focused")
+	settings.go_back()
+	await _frames()
+	_check(not settings._confirm_row.visible and _focus() == settings._update_button, "settings: Back on the question means No")
+
+	# Below Update there is only text: Down scrolls to it, Up scrolls back.
+	var scroll := settings.key_scroll
+	scroll.scroll_vertical = 0
+	await _frames()
+	var bar := scroll.get_v_scroll_bar()
+	_check(bar.max_value > bar.page, "settings: the screen is taller than the TV (the test needs a scroll)")
+	for i in 10:
+		await _press("ui_down")
+	_check(scroll.scroll_vertical >= int(bar.max_value - bar.page), "settings: Down scrolls to the bottom")
+	_check(_focus() == settings._update_button, "settings: scrolling keeps the focus on Update")
+	for i in 10:
+		await _press("ui_up")
+	_check(scroll.scroll_vertical == 0, "settings: Up scrolls back to the top")
+	await _close(settings)
 
 
 func _joy_event(button: JoyButton, device: int, pressed: bool = true) -> InputEventJoypadButton:
