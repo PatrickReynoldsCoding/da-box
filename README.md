@@ -43,7 +43,7 @@ The service enforces the limits, not the UI. It checks what the player agent is 
 
 ## Admin app
 
-Open http://tvbox.local on a phone on the home Wi-Fi and enter the PIN. Tabs: Home (today's time, extra time, parent mode, USB sticks), Content (hide/show, art and details, copy from USB, playlists), Channels, Guide, Upload, Activity (last 7 days), Settings (limits, colour theme and sounds, TMDB key, PIN, backup and restore, system update, run setup again).
+Open http://tvbox.local on a phone on the home Wi-Fi and enter the PIN. Tabs: Home (today's time, extra time, parent mode, USB sticks), Content (hide/show, art and details, copy from USB, playlists), Channels, Guide, Upload, Activity (last 7 days), Settings (limits, colour theme and sounds, TMDB key, PIN, backup and restore, system update, da-box version and update, run setup again).
 
 ## Run it on the Mac (dev mode)
 
@@ -111,6 +111,30 @@ The box shows the first-run setup on the TV. After the setup, open http://tvbox.
 
 To get the desktop back: `sudo install/uninstall.sh` (add `--purge` to also delete the code, media, settings and users), then restart.
 
-**If the screen is black and there is no SSH**: hold Shift (or press Esc on UEFI machines) while the machine starts, choose *Advanced options*, then a *recovery mode* entry, then *root*. Run `mount -o remount,rw /`, then `systemctl disable dabox-kiosk` and `reboot`. Back in the desktop, run `sudo install/uninstall.sh`.
+**If the screen is black and there is no SSH** (tried on a real Linux Mint laptop):
+
+1. Hold Shift (or press Esc **once** on UEFI machines) while the machine starts. If you land at a `grub>` prompt, type `normal` and press an arrow key at once so the menu stays.
+2. On the first entry press `e`, add ` init=/bin/bash` at the end of the line that starts with `linux`, and press Ctrl+X.
+3. At the `#` prompt run each line on its own (Enter after each). `systemctl` does not work at this prompt, so the files are removed directly:
+   ```sh
+   mount -o remount,rw /
+   rm -f /etc/systemd/system/dabox-kiosk.service /etc/systemd/system/*.wants/dabox-kiosk.service
+   rm -f /etc/systemd/system/*.wants/nftables.service
+   echo 'flush ruleset' > /etc/nftables.conf
+   sync
+   ```
+4. Hold the power button to turn off, start again and choose the normal entry. Back in the desktop, run `sudo install/uninstall.sh`.
 
 Other Linux families (Fedora, Arch, openSUSE) are not supported: the installer stops with a message before changing anything.
+
+## Update da-box
+
+In parent mode, Home on the TV has **Update da-box**; the admin app has the same under Settings → *da-box version*. Both show the installed version and the newest [GitHub release](https://github.com/PatrickReynoldsCoding/da-box/releases), and install it on request: `dabox-upgrade.service` (root) opens the firewall, downloads the release's source, and runs its `install/install.sh` with the options saved at install time (`/etc/dabox/update.env`). Settings, media and users stay. The TV restarts at the end. The log: `journalctl -u dabox-upgrade`.
+
+The box only sees **releases**, not branches. To publish one from `main`:
+
+```sh
+gh release create v0.2.0 --target main --generate-notes
+```
+
+Use `vMAJOR.MINOR.PATCH` tags: the box compares the numbers. A box installed from a git checkout shows `git describe` as its version (for example `v0.2.0-3-gabc1234`) and is offered only newer releases. `DABOX_UPDATE_REPO=owner/name sudo install/install.sh` takes updates from a fork.

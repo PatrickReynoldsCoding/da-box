@@ -25,7 +25,8 @@ step() { echo; echo "==> $*"; }
 step "Stopping da-box"
 systemctl disable --now dabox-kiosk dabox-service >/dev/null 2>&1 || true
 rm -f /etc/systemd/system/dabox-kiosk.service /etc/systemd/system/dabox-service.service \
-  /etc/systemd/system/dabox-update.service
+  /etc/systemd/system/dabox-update.service /etc/systemd/system/dabox-upgrade.service
+rm -rf /var/cache/dabox
 
 step "Removing the firewall"
 nft delete table inet dabox 2>/dev/null || true

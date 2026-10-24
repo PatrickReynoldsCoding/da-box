@@ -1,5 +1,6 @@
 # For polkit older than 0.106 (Ubuntu 22.04, Linux Mint 21), which does not read 50-dabox.rules.
-# The same permissions, except starting dabox-update.service: a .pkla file cannot limit that to one unit.
+# The same permissions, except starting dabox-update.service and dabox-upgrade.service: a .pkla
+# file cannot limit that to one unit.
 [da-box service]
 Identity=unix-user:tvbox
 Action=org.freedesktop.NetworkManager.*;org.freedesktop.timedate1.set-timezone;org.freedesktop.login1.power-off;org.freedesktop.login1.power-off-multiple-sessions;org.freedesktop.login1.reboot;org.freedesktop.login1.reboot-multiple-sessions;org.freedesktop.udisks2.filesystem-mount;org.freedesktop.udisks2.filesystem-mount-other-seat

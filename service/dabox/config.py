@@ -17,6 +17,9 @@ class ServiceConfig:
     agent_url: str = "http://127.0.0.1:8091"
     # Where libretro cores live. Games for systems without a core are not shown.
     core_dirs: tuple[Path, ...] = ()
+    # The installed da-box version (written by install.sh) and the GitHub repo its releases come from.
+    version_file: Path = Path("/opt/dabox/VERSION")
+    update_repo: str = "PatrickReynoldsCoding/da-box"
 
 
 def load_service_config() -> ServiceConfig:
@@ -29,4 +32,6 @@ def load_service_config() -> ServiceConfig:
         fake_usb_dir=Path(os.environ["DABOX_FAKE_USB_DIR"]) if os.environ.get("DABOX_FAKE_USB_DIR") else None,
         agent_url=os.environ.get("DABOX_AGENT_URL", "http://127.0.0.1:8091"),
         core_dirs=tuple(Path(folder) for folder in os.environ.get("DABOX_CORE_DIRS", "").split(":") if folder),
+        version_file=Path(os.environ.get("DABOX_VERSION_FILE", "/opt/dabox/VERSION")),
+        update_repo=os.environ.get("DABOX_UPDATE_REPO", "PatrickReynoldsCoding/da-box"),
     )

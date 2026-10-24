@@ -9,6 +9,9 @@
 #   --extra-cores  also download Mega Drive and PlayStation emulators from the
 #                  libretro build server (Debian does not package them)
 #
+# The options are saved, so "Update da-box" (TV or admin app) runs a new release's installer
+# the same way. DABOX_UPDATE_REPO (owner/name on GitHub) changes where updates come from.
+#
 # The machine needs internet access while this runs. At the end the firewall
 # closes the internet for everything except time sync and DNS.
 #
@@ -26,12 +29,14 @@ SERVICE_USER="tvbox"
 KID_USER="kid"
 MEDIA_GROUP="dabox-media"
 HOSTNAME_FOR_BOX="tvbox"
+DEFAULT_UPDATE_REPO="PatrickReynoldsCoding/da-box"
 # Display managers the box replaces. display-manager.service is checked too.
 DISPLAY_MANAGERS="gdm gdm3 lightdm sddm lxdm xdm slim nodm greetd ly cosmic-greeter"
 
 keep_ssh=false
 vm=false
 extra_cores=false
+install_options=("$@")
 for argument in "$@"; do
   case "$argument" in
     --keep-ssh) keep_ssh=true ;;
@@ -180,6 +185,8 @@ install_code() {
   install -d "$INSTALL_DIR/bin"
   install -m 0755 "$templates/dabox-session" "$INSTALL_DIR/bin/dabox-session"
   install -m 0755 "$templates/dabox-update" "$INSTALL_DIR/bin/dabox-update"
+  install -m 0755 "$templates/dabox-upgrade" "$INSTALL_DIR/bin/dabox-upgrade"
+  installed_version > "$INSTALL_DIR/VERSION"
 
   # A venv from an older Python (or a broken one after a distro upgrade) is made again.
   if [[ -e "$INSTALL_DIR/venv" ]] && ! python_ok "$INSTALL_DIR/venv/bin/python"; then
@@ -188,6 +195,21 @@ install_code() {
   [[ -x "$INSTALL_DIR/venv/bin/python" ]] || "$python" -m venv "$INSTALL_DIR/venv"
   "$INSTALL_DIR/venv/bin/pip" install --quiet --upgrade pip
   "$INSTALL_DIR/venv/bin/pip" install --quiet "$INSTALL_DIR/service"
+}
+
+# The release tag when "Update da-box" runs this, otherwise what git says about the checkout.
+installed_version() {
+  if [[ -n ${DABOX_VERSION:-} ]]; then
+    echo "$DABOX_VERSION"
+  elif ! command -v git >/dev/null || ! git -C "$repo" -c safe.directory="$repo" describe --tags --always --dirty 2>/dev/null; then
+    echo unknown
+  fi
+}
+
+update_repo() {
+  local saved=""
+  [[ -r "$CONFIG_DIR/update.env" ]] && saved="$(. "$CONFIG_DIR/update.env" && echo "${DABOX_UPDATE_REPO:-}")"
+  echo "${DABOX_UPDATE_REPO:-${saved:-$DEFAULT_UPDATE_REPO}}"
 }
 
 install_godot() {
@@ -299,9 +321,14 @@ DABOX_MEDIA_DIR=$MEDIA_DIR
 DABOX_DATA_DIR=$DATA_DIR
 DABOX_PORT=80
 DABOX_CORE_DIRS=$(core_dirs)
+DABOX_UPDATE_REPO=$(update_repo)
 HTTPS_PROXY=http://127.0.0.1:8888
 NO_PROXY=127.0.0.1,localhost
 EOF
+  # For dabox-upgrade: where releases come from, and how to run their installer.
+  local repo_name
+  repo_name="$(update_repo)"
+  printf 'DABOX_UPDATE_REPO="%s"\nDABOX_INSTALL_OPTIONS="%s"\n' "$repo_name" "${install_options[*]}" > "$CONFIG_DIR/update.env"
 }
 
 polkit_has_js_rules() {
@@ -317,11 +344,12 @@ install_system_files() {
   install -m 0644 "$templates/dabox-service.service" /etc/systemd/system/dabox-service.service
   install -m 0644 "$templates/dabox-kiosk.service" /etc/systemd/system/dabox-kiosk.service
   install -m 0644 "$templates/dabox-update.service" /etc/systemd/system/dabox-update.service
+  install -m 0644 "$templates/dabox-upgrade.service" /etc/systemd/system/dabox-upgrade.service
   install -m 0644 "$templates/pam-dabox-kiosk" /etc/pam.d/dabox-kiosk
   install -d /etc/polkit-1/rules.d
   install -m 0644 "$templates/50-dabox.rules" /etc/polkit-1/rules.d/50-dabox.rules
   if ! polkit_has_js_rules; then
-    warn "This polkit is older than 0.106. The admin app works, except 'System update'."
+    warn "This polkit is older than 0.106. The admin app works, except 'System update' and 'Update da-box'."
     install -d /etc/polkit-1/localauthority/50-local.d
     install -m 0644 "$templates/50-dabox.pkla" /etc/polkit-1/localauthority/50-local.d/50-dabox.pkla
   fi

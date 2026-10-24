@@ -1,0 +1,7 @@
+[Unit]
+Description=da-box software update (started from the TV or the admin app)
+
+[Service]
+Type=oneshot
+ExecStart=/opt/dabox/bin/dabox-upgrade
+TimeoutStartSec=3600

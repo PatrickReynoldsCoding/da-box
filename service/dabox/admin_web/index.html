@@ -246,6 +246,18 @@
         </div>
 
         <div class="card">
+          <h2>da-box version</h2>
+          <p class="muted">Installs the newest da-box release from GitHub. The TV restarts at the end, and the box keeps its settings and media.</p>
+          <p id="software-version"></p>
+          <div class="row wrap">
+            <button id="software-check" class="secondary">Check for updates</button>
+            <button id="software-update" hidden>Update da-box</button>
+          </div>
+          <p id="software-status" class="muted"></p>
+          <pre id="software-log" class="log" hidden></pre>
+        </div>
+
+        <div class="card">
           <h2>Setup</h2>
           <p class="muted">Run the first-run setup on the TV again. The box shows the setup screens until it is complete.</p>
           <button id="rerun-setup" class="danger">Run setup again</button>

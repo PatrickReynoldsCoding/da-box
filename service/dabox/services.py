@@ -15,6 +15,7 @@ from dabox.maintenance import Updater
 from dabox.metadata import MetadataService
 from dabox.models import Album, Film, Game
 from dabox.playlists import Playlists
+from dabox.software_update import SoftwareUpdates
 from dabox.store import Store
 from dabox.system import NetworkBackend
 from dabox.usb import UsbBackend, UsbStick
@@ -37,6 +38,7 @@ class Services:
     guide: Guide
     limits: LimitsService
     updater: Updater
+    software: SoftwareUpdates
     usb_copier: UsbCopier
     playlists: Playlists
     core_dirs: tuple[Path, ...]
