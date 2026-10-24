@@ -9,7 +9,7 @@ See [DESIGN.md](DESIGN.md) for the full design.
 | Folder | What it is |
 |---|---|
 | `service/` | Python (FastAPI) package `dabox`: box API for the UI (localhost only), admin API + web app (PIN), library scan, settings, setup. Also `dabox.agent`, the player agent that controls mpv. |
-| `ui/` | Godot 4 box UI (Home, TV guide, channels, Films, Music with artists, songs, search and playlists, Games, Copy from USB, first-run setup, sleeping screen). Arrow keys + Enter + Esc, or a game controller. |
+| `ui/` | Godot 4 box UI (Home, TV guide, channels, Films, Music with artists, songs, search and playlists, Games, Copy from USB, first-run setup, sleeping screen). Arrow keys + Enter + Esc, or a game controller (stick or d-pad to move, A = OK, B or Back/Select = back). |
 | `install/` | `install.sh` for an apt-based box (Raspberry Pi OS, Debian 12+, Ubuntu 22.04+, Linux Mint 21+; arm64 or x86_64), `uninstall.sh`, plus systemd, PAM, polkit and firewall files. |
 | `vm/` | `box-vm.sh`: a QEMU VM (Mac, Windows or Linux host) that acts as the real box, and a desktop VM like Linux Mint. |
 | `dev/` | `run-dev.sh` (run everything on the Mac) and `make-test-media.sh` (test films and music with ffmpeg). |
