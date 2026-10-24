@@ -29,6 +29,22 @@ def test_parse_lsblk_finds_usb_partitions_only() -> None:
     assert found == [BlockDevice(path="/dev/sda1", filesystem="vfat", label="KIDS", uuid="AB-12", mountpoint=None, on_usb=True)]
 
 
+# lsblk on Linux Mint 22 (util-linux 2.39): a flat list, and only the disk has TRAN.
+FLAT_LSBLK_OUTPUT = json.dumps({
+    "blockdevices": [
+        {"path": "/dev/sda", "fstype": None, "label": None, "uuid": None, "mountpoint": None, "tran": "usb", "pkname": None},
+        {"path": "/dev/sda1", "fstype": "exfat", "label": "Untitled", "uuid": "F29B-F8EA", "mountpoint": None, "tran": None, "pkname": "sda"},
+        {"path": "/dev/nvme0n1", "fstype": None, "label": None, "uuid": None, "mountpoint": None, "tran": "nvme", "pkname": None},
+        {"path": "/dev/nvme0n1p2", "fstype": "ext4", "label": None, "uuid": "root", "mountpoint": "/", "tran": None, "pkname": "nvme0n1"},
+    ]
+})
+
+
+def test_parse_flat_lsblk_finds_usb_partitions_by_parent() -> None:
+    found = usb_filesystems(parse_lsblk(FLAT_LSBLK_OUTPUT))
+    assert found == [BlockDevice(path="/dev/sda1", filesystem="exfat", label="Untitled", uuid="F29B-F8EA", mountpoint=None, on_usb=True)]
+
+
 def test_mount_options_are_read_only_and_readable_by_all() -> None:
     assert mount_options("vfat") == "ro,noexec,nosuid,nodev,umask=0022"
     assert mount_options("ext4") == "ro,noexec,nosuid,nodev"
