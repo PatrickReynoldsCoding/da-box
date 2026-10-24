@@ -1,2 +1,5 @@
 # USB sticks mount under /media/<label> (not /media/tvbox/), so the kid user can read them too.
-ENV{ID_BUS}=="usb", ENV{ID_FS_USAGE}=="filesystem", ENV{UDISKS_FILESYSTEM_SHARED}="1"
+# ID_PATH, not ID_BUS: a USB hard disk whose bridge passes the disk's ATA identity through has
+# ID_BUS=ata (a Toshiba drive on Linux Mint), but its path still goes through USB.
+ENV{ID_FS_USAGE}=="filesystem", ENV{ID_PATH}=="*-usb-*", ENV{UDISKS_FILESYSTEM_SHARED}="1"
+ENV{ID_FS_USAGE}=="filesystem", ENV{ID_BUS}=="usb", ENV{UDISKS_FILESYSTEM_SHARED}="1"
