@@ -1,0 +1,85 @@
+{
+  "description": "Linux Mint 22 laptop with a 1 TB Toshiba USB hard disk (exFAT). lsblk prints a flat list and only the disk has TRAN=usb; the USB bridge passes the disk's ATA identity through, so udev says ID_BUS=ata.",
+  "source": "real: lsblk and the udev properties of sda1 recorded on the laptop, 2026-10-24. The NVMe udev properties are typical.",
+  "lsblk": {
+    "blockdevices": [
+      {
+        "path": "/dev/sda",
+        "fstype": null,
+        "label": null,
+        "uuid": null,
+        "mountpoint": null,
+        "tran": "usb",
+        "pkname": null
+      },
+      {
+        "path": "/dev/sda1",
+        "fstype": "exfat",
+        "label": "Untitled",
+        "uuid": "F29B-F8EA",
+        "mountpoint": "/media/tvbox/Untitled",
+        "tran": null,
+        "pkname": "sda"
+      },
+      {
+        "path": "/dev/nvme0n1",
+        "fstype": null,
+        "label": null,
+        "uuid": null,
+        "mountpoint": null,
+        "tran": "nvme",
+        "pkname": null
+      },
+      {
+        "path": "/dev/nvme0n1p1",
+        "fstype": "vfat",
+        "label": null,
+        "uuid": "9678-AB76",
+        "mountpoint": "/boot/efi",
+        "tran": "nvme",
+        "pkname": "nvme0n1"
+      },
+      {
+        "path": "/dev/nvme0n1p2",
+        "fstype": "ext4",
+        "label": null,
+        "uuid": "a37529ea-1c72-4d59-aa6e-5e60ac3f9f8d",
+        "mountpoint": "/",
+        "tran": "nvme",
+        "pkname": "nvme0n1"
+      }
+    ]
+  },
+  "udev": {
+    "/dev/sda1": {
+      "DEVTYPE": "partition",
+      "ID_BUS": "ata",
+      "ID_PATH": "pci-0000:00:14.0-usb-0:2:1.0-scsi-0:0:0:0",
+      "ID_FS_TYPE": "exfat",
+      "ID_FS_USAGE": "filesystem",
+      "ID_USB_DRIVER": "usb-storage",
+      "ID_FS_LABEL": "Untitled"
+    },
+    "/dev/nvme0n1p1": {
+      "DEVTYPE": "partition",
+      "ID_PATH": "pci-0000:00:1d.0-nvme-1",
+      "ID_FS_TYPE": "vfat",
+      "ID_FS_USAGE": "filesystem"
+    },
+    "/dev/nvme0n1p2": {
+      "DEVTYPE": "partition",
+      "ID_PATH": "pci-0000:00:1d.0-nvme-1",
+      "ID_FS_TYPE": "ext4",
+      "ID_FS_USAGE": "filesystem"
+    }
+  },
+  "expect": {
+    "usb_filesystems": [
+      "/dev/sda1"
+    ],
+    "unsupported": [],
+    "shared": [
+      "/dev/sda1"
+    ]
+  }
+}

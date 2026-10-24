@@ -21,6 +21,7 @@ MOUNT_OPTIONS = "ro,noexec,nosuid,nodev"
 # FAT and exFAT have no owners. Let every user (the kid user too) read the files.
 _PERMISSION_OPTIONS_BY_FILESYSTEM = {"vfat": ",umask=0022", "exfat": ",umask=0022", "ntfs3": ",umask=0022", "ntfs": ",umask=0022"}
 _MOUNTABLE_FILESYSTEMS = frozenset({"vfat", "exfat", "ntfs", "ntfs3", "ext4", "ext3", "ext2"})
+_NOT_MEDIA_FILESYSTEMS = frozenset({"swap", "crypto_LUKS", "LVM2_member", "linux_raid_member"})
 
 
 class UsbStick(BaseModel):
@@ -80,6 +81,16 @@ def parse_lsblk(output: str) -> list[BlockDevice]:
 
 def usb_filesystems(devices: list[BlockDevice]) -> list[BlockDevice]:
     return [device for device in devices if device.on_usb and device.filesystem in _MOUNTABLE_FILESYSTEMS]
+
+
+def unsupported_usb_filesystems(devices: list[BlockDevice]) -> list[BlockDevice]:
+    """USB filesystems the box cannot read (HFS+ or APFS from a Mac, btrfs, ...). Swap and
+    encrypted partitions are not media, so they are not listed."""
+    return [
+        device for device in devices
+        if device.on_usb and device.filesystem and device.filesystem not in _MOUNTABLE_FILESYSTEMS
+        and device.filesystem not in _NOT_MEDIA_FILESYSTEMS
+    ]
 
 
 def mount_options(filesystem: str) -> str:
