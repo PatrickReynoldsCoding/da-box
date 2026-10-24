@@ -29,7 +29,8 @@ def test_login_status_and_logout(admin_client: TestClient) -> None:
         "parent_mode": False,
         "setup_required": False,
         "timezone": "Europe/London",
-        "film_count": 2,
+        # Two videos and the Bluey group.
+        "film_count": 3,
         "album_count": 1,
     }
     admin_client.post("/api/admin/logout")

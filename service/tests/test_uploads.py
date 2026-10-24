@@ -32,4 +32,4 @@ def test_film_destination_rejects_non_video() -> None:
 
 
 def test_music_destination_falls_back_to_unknown() -> None:
-    assert music_destination(MEDIA, "", "", "song.mp3") == MEDIA / "Music" / "Unknown artist" / "Unknown album" / "song.mp3"
+    assert music_destination(MEDIA, "", "", "song.mp3") == MEDIA / "Music" / "Unknown Artist" / "Unknown Album" / "song.mp3"

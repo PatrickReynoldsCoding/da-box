@@ -23,11 +23,14 @@ func _run() -> void:
 	await _test_setup_jumps_to_next()
 	await _test_setup_down_goes_to_back()
 	await _test_copy_tick_list()
+	await _test_copy_everything_and_drive_check()
 	await _test_music_menu()
 	await _test_music_screens_open()
 	await _test_controller_buttons()
 	await _test_home_settings_button()
 	await _test_settings_update_asks_first()
+	await _test_videos_tiles()
+	await _test_group_screen()
 	print("Key tests: %d checks, %d failed" % [_checks, _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
 
@@ -260,6 +263,43 @@ func _test_controller_buttons() -> void:
 	await _frames()
 
 
+func _test_copy_everything_and_drive_check() -> void:
+	var screen := CopyUsbScreen.new()
+	await _show(screen)
+	screen.show_drive_checks([
+		{"drive": {"id": "s1", "label": "Untitled", "mounted": true, "problem": null}, "games_without_core": 1, "hidden": 2,
+		 "report": {"videos": 4, "groups": 3, "albums": 3, "songs": 351, "games": 1, "other_files": {".xlsx": 1, ".pdf": 2},
+			"skipped_folders": 2, "unreadable": []}},
+		{"drive": {"id": "s2", "label": "Mac HD", "mounted": false, "problem": "The box cannot read hfsplus drives. Use FAT32, exFAT, NTFS or ext4."},
+		 "games_without_core": 0, "hidden": 0, "report": null},
+	])
+	_check(screen._check.text == "Mac HD: The box cannot read hfsplus drives. Use FAT32, exFAT, NTFS or ext4.", "drive check: a drive the box cannot read says why")
+	screen.show_sticks([{
+		"stick_id": "s1", "label": "Untitled", "folders": [
+			{"key": "videos", "name": "Videos", "bytes": 300, "items": [
+				{"id": "videos:a", "title": "Nature", "subtitle": "2 videos", "bytes": 200, "on_box": false},
+				{"id": "videos:b", "title": "Frozen", "subtitle": null, "bytes": 0, "on_box": true},
+				{"id": "videos:c", "title": "Lesson", "subtitle": null, "bytes": 100, "on_box": false},
+			]},
+			{"key": "music", "name": "Albums", "bytes": 50, "items": [
+				{"id": "music:d", "title": "Unknown Album", "subtitle": "Nick Lowe", "bytes": 50, "on_box": false},
+			]},
+		],
+	}])
+	await _frames()
+	_check(screen._check.text.ends_with("Found 4 videos, 3 groups, 3 albums (351 songs), 1 game.  Skipped: 3 other files, 1 game with no emulator, 2 hidden."),
+		"drive check: found and skipped for the drive (got %s)" % screen._check.text)
+	_check(not screen.copy_all_button.disabled, "copy everything: on when there is something new")
+	screen.copy_everything()
+	_check(screen.ticked_ids() == ["videos:a", "videos:c", "music:d"], "copy everything: ticks every item that is not on the box")
+	await _frames()
+
+	screen.show_sticks([{"stick_id": "s3", "label": "Empty", "folders": []}])
+	await _frames()
+	_check(screen.copy_all_button.disabled, "copy everything: off when there is nothing new")
+	await _close(screen)
+
+
 # ---- Settings (DESIGN_CORRECTIONS_2.md, part 7) ----
 
 func _test_home_settings_button() -> void:
@@ -308,6 +348,65 @@ func _test_settings_update_asks_first() -> void:
 		await _press("ui_up")
 	_check(scroll.scroll_vertical == 0, "settings: Up scrolls back to the top")
 	await _close(settings)
+
+
+# ---- Videos and groups (DESIGN_CORRECTIONS_2.md, part 2) ----
+
+func _test_videos_tiles() -> void:
+	var videos := VideosScreen.new()
+	await _show(videos)
+	var group_tile := videos._tile({"kind": "group", "id": "g1", "title": "Bluey", "art_url": null, "video_count": 3, "source": "box", "hidden": false})
+	var video_tile := videos._tile({"kind": "video", "id": "v1", "title": "Frozen", "year": 2013, "art_url": null, "seconds": 60.0, "path": "/x.mkv", "source": "usb", "hidden": false})
+	videos._grid.add_child(group_tile)
+	videos._grid.add_child(video_tile)
+	var opened: Array = []
+	videos.open_screen.connect(func(screen: Screen) -> void: opened.append(screen))
+	group_tile.grab_focus()
+	await _press("ui_accept")
+	_check(opened.size() == 1 and opened[0] is GroupScreen and opened[0]._group_id == "g1", "videos: a group tile opens the group")
+	for screen in opened:
+		screen.free()
+	await _close(videos)
+
+
+static func _sample_group(resume: int) -> Dictionary:
+	return {
+		"id": "g1", "title": "Fargo (2014) Season 5", "art_url": null, "hidden": false, "source": "usb", "stick_label": "Untitled",
+		"resume_index": resume,
+		"videos": [
+			{"id": "e1", "title": "The Tragedy of the Commons", "path": "/1.mkv", "seconds": 60.0, "section": "", "code": "S5 E1"},
+			{"id": "e2", "title": "Trials and Tribulations", "path": "/2.mkv", "seconds": 60.0, "section": "", "code": "S5 E2"},
+			{"id": "e3", "title": "Making of", "path": "/3.mkv", "seconds": null, "section": "Extras", "code": null},
+		],
+	}
+
+
+func _test_group_screen() -> void:
+	var group := GroupScreen.new("g1")
+	await _show(group)
+	group.show_group(_sample_group(0))
+	await _frames()
+	_check(_focus() == group._play_button and group._play_button.text == "Play", "group: starts on Play")
+	var rows: Array[String] = []
+	for child in group._videos.get_children():
+		rows.append(child.text)
+	_check(rows == ["Play", "S5 E1  ·  The Tragedy of the Commons", "S5 E2  ·  Trials and Tribulations", "Extras", "Making of"],
+		"group: videos in order, with the section heading (got %s)" % [rows])
+	await _press("ui_down")
+	_check(_focus() is Button and _focus().get_meta("video_index", -1) == 0, "group: Down goes to the first video")
+
+	group.show_group(_sample_group(1))
+	await _frames()
+	_check(group._play_button.text == "Play: S5 E2  ·  Trials and Tribulations", "group: Play names the video it resumes at")
+	_check((group._videos.get_child(1) as Button).text == "Play from the start", "group: Play from the start is there after a resume")
+
+	# A video that played to its end moves the resume point on; a stopped one does not.
+	group._on_video_end(false, 1)
+	_check(group._group["resume_index"] == 1, "group: a stopped video does not move on")
+	group._on_video_end(true, 2)
+	await _frames()
+	_check(group._group["resume_index"] == 0, "group: after the last video, Play starts from the beginning again")
+	await _close(group)
 
 
 func _joy_event(button: JoyButton, device: int, pressed: bool = true) -> InputEventJoypadButton:

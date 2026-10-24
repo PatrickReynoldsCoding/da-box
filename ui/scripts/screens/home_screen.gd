@@ -1,6 +1,6 @@
 class_name HomeScreen
 extends Screen
-## The four big tiles (TV, Films, Music, Games). In parent mode a fifth tile, USB,
+## The four big tiles (TV, Videos, Music, Games). In parent mode a fifth tile, USB,
 ## copies from a USB drive. A bar under the tiles shows a copy while it runs.
 
 const TILE_WIDTH := 380.0
@@ -9,7 +9,7 @@ const NARROW_TILE_WIDTH := 300.0
 const COPY_RESULT_SECONDS := 600.0
 
 var _tv_tile: BigTile
-var _films_tile: BigTile
+var _videos_tile: BigTile
 var _music_tile: BigTile
 var _games_tile: BigTile
 var _usb_tile: BigTile
@@ -41,15 +41,15 @@ func _ready() -> void:
 	tiles.add_theme_constant_override("separation", 48)
 	_tv_tile = BigTile.new("TV", Icon.Kind.TV, UiTheme.TV)
 	_tv_tile.pressed.connect(func() -> void: open_screen.emit(GuideScreen.new()))
-	_films_tile = BigTile.new("Films", Icon.Kind.FILM, UiTheme.FILMS)
+	_videos_tile = BigTile.new("Videos", Icon.Kind.FILM, UiTheme.FILMS)
 	_music_tile = BigTile.new("Music", Icon.Kind.MUSIC, UiTheme.MUSIC)
 	_games_tile = BigTile.new("Games", Icon.Kind.GAME, UiTheme.GAMES)
-	_films_tile.pressed.connect(func() -> void: open_screen.emit(FilmsScreen.new()))
+	_videos_tile.pressed.connect(func() -> void: open_screen.emit(VideosScreen.new()))
 	_music_tile.pressed.connect(func() -> void: open_screen.emit(MusicScreen.new()))
 	_games_tile.pressed.connect(func() -> void: open_screen.emit(GamesScreen.new()))
 	_usb_tile = BigTile.new("USB", Icon.Kind.USB, UiTheme.WARNING, "Copy to the box")
 	_usb_tile.pressed.connect(func() -> void: open_screen.emit(CopyUsbScreen.new()))
-	for tile in [_tv_tile, _films_tile, _music_tile, _games_tile, _usb_tile]:
+	for tile in [_tv_tile, _videos_tile, _music_tile, _games_tile, _usb_tile]:
 		tile.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		tiles.add_child(tile)
 	column.add_child(tiles)
@@ -86,7 +86,7 @@ func _ready() -> void:
 
 
 func default_focus() -> Control:
-	return _films_tile
+	return _videos_tile
 
 
 func go_back() -> void:
@@ -99,12 +99,12 @@ func on_shown() -> void:
 
 func _on_limits_changed(limits: Dictionary) -> void:
 	if limits.is_empty() or limits.get("unlimited", false):
-		for tile in [_tv_tile, _films_tile, _games_tile]:
+		for tile in [_tv_tile, _videos_tile, _games_tile]:
 			tile.set_subtitle("")
 		return
 	var video_text := "Sleeping" if limits["video_locked"] else "%s left" % Api.minutes_text(limits["video_seconds_left"])
 	_tv_tile.set_subtitle(video_text)
-	_films_tile.set_subtitle(video_text)
+	_videos_tile.set_subtitle(video_text)
 	_games_tile.set_subtitle(limits["games_message"])
 
 
@@ -114,7 +114,7 @@ func _on_state_changed(state: Dictionary) -> void:
 	if not parent and (_usb_tile.has_focus() or _leave_parent_mode.has_focus()):
 		_games_tile.grab_focus()
 	_usb_tile.visible = parent
-	for tile in [_tv_tile, _films_tile, _music_tile, _games_tile, _usb_tile]:
+	for tile in [_tv_tile, _videos_tile, _music_tile, _games_tile, _usb_tile]:
 		tile.custom_minimum_size.x = NARROW_TILE_WIDTH if parent else TILE_WIDTH
 	_copy_bar.focus_mode = Control.FOCUS_ALL if parent else Control.FOCUS_NONE
 
@@ -150,7 +150,7 @@ func _on_copy_changed(progress: Dictionary) -> void:
 	var recent := state != "idle" and state != "copying" and since != null and float(since) < COPY_RESULT_SECONDS
 	if not (state == "copying" or recent):
 		if _copy_bar.has_focus():
-			_films_tile.grab_focus()
+			_videos_tile.grab_focus()
 		_copy_bar.visible = false
 		return
 	_copy_bar.visible = true
@@ -196,7 +196,7 @@ func _make_settings_button() -> Button:
 func _on_leave_parent_mode() -> void:
 	await Api.service_post("/box/parent-mode/leave")
 	await Api.refresh_state()
-	_films_tile.grab_focus()
+	_videos_tile.grab_focus()
 
 
 func _refresh_music_subtitle() -> void:

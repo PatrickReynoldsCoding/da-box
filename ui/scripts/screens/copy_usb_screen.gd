@@ -1,17 +1,22 @@
 class_name CopyUsbScreen
 extends Screen
-## Copy from USB (parent mode only): the folders on the drive with tick boxes. Tick a whole
-## folder (Films, TV, Music, Games), or open it (Right, then Enter) and tick single items.
-## Copy checks the space on the box first. Items already on the box cannot be ticked.
+## Copy from USB (parent mode only): what the box found on the drive, by kind (Videos, Albums,
+## Games), with tick boxes. Tick a whole kind, or open it (Right, then Enter) and tick single
+## items; or "Copy everything". Copy checks the space on the box first. Items already on the
+## box cannot be ticked. A line at the top says what the box found and skipped (the drive check).
 
 var copy_button: Button
+var copy_all_button: Button
 var rows: VBoxContainer
 var _sticks: Array = []
 var _stick: Dictionary = {}
 var _stick_picker: ChoiceRow
 var _stick_holder: HBoxContainer
 var _summary: Label
+var _check: Label
 var _message: Label
+## Drive checks from /box/usb/drives, by stick id.
+var _drive_checks: Dictionary = {}
 var _ticked: Dictionary = {}
 ## Folder key -> {"box": TickBox, "open": Button, "items": [item Dictionary], "rows": [Control]}
 var _folders: Dictionary = {}
@@ -27,7 +32,10 @@ func _ready() -> void:
 	_stick_holder = HBoxContainer.new()
 	_stick_holder.visible = false
 	column.add_child(_stick_holder)
-	column.add_child(UiTheme.muted_label("Tick a folder to copy all of it, or open it to tick single items. Items already on the box are skipped."))
+	_check = UiTheme.muted_label("", UiTheme.FONT_SIZE)
+	_check.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	column.add_child(_check)
+	column.add_child(UiTheme.muted_label("Tick a kind to copy all of it, or open it to tick single items. Items already on the box are skipped."))
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.follow_focus = true
@@ -39,10 +47,15 @@ func _ready() -> void:
 	column.add_child(scroll)
 	var bottom := HBoxContainer.new()
 	bottom.add_theme_constant_override("separation", 30)
+	copy_all_button = Button.new()
+	copy_all_button.text = "Copy everything"
+	copy_all_button.custom_minimum_size = Vector2(380, 90)
+	copy_all_button.add_theme_stylebox_override("normal", UiTheme.rounded_box(UiTheme.GOOD.darkened(0.3), 24))
+	copy_all_button.pressed.connect(copy_everything)
+	bottom.add_child(copy_all_button)
 	copy_button = Button.new()
-	copy_button.text = "Copy"
-	copy_button.custom_minimum_size = Vector2(300, 90)
-	copy_button.add_theme_stylebox_override("normal", UiTheme.rounded_box(UiTheme.GOOD.darkened(0.3), 24))
+	copy_button.text = "Copy ticked"
+	copy_button.custom_minimum_size = Vector2(320, 90)
 	copy_button.pressed.connect(_copy)
 	bottom.add_child(copy_button)
 	_summary = UiTheme.muted_label("", UiTheme.FONT_SIZE)
@@ -72,11 +85,52 @@ func on_shown() -> void:
 
 
 func _load() -> void:
+	var checks := await Api.service_get("/box/usb/drives")
+	if checks.ok:
+		show_drive_checks(checks.data)
 	var reply := await Api.service_get("/box/usb/tree")
 	if not reply.ok:
 		_message.text = Api.error_text(reply, "The USB drive could not be read.")
 		return
 	show_sticks(reply.data)
+
+
+## The drive check (DESIGN_CORRECTIONS_2.md, part 5). Drives that cannot be read say why.
+func show_drive_checks(checks: Array) -> void:
+	_drive_checks.clear()
+	var problems: Array[String] = []
+	for check in checks:
+		_drive_checks[check["drive"]["id"]] = check
+		var drive: Dictionary = check["drive"]
+		if drive["problem"] is String and not drive["mounted"]:
+			problems.append("%s: %s" % [drive["label"], drive["problem"]])
+	_check.text = "\n".join(problems)
+
+
+static func check_text(check: Dictionary) -> String:
+	var report: Variant = check.get("report")
+	if not report is Dictionary:
+		return "Looking for media…"
+	var found := "Found %d video%s, %d group%s, %d album%s (%d song%s), %d game%s." % [
+		report["videos"], _s(report["videos"]), report["groups"], _s(report["groups"]), report["albums"], _s(report["albums"]),
+		report["songs"], _s(report["songs"]), report["games"], _s(report["games"])]
+	var skipped: Array[String] = []
+	var others := 0
+	for extension in report["other_files"]:
+		others += int(report["other_files"][extension])
+	if others > 0:
+		skipped.append("%d other file%s" % [others, _s(others)])
+	if check.get("games_without_core", 0) > 0:
+		skipped.append("%d game%s with no emulator" % [check["games_without_core"], _s(check["games_without_core"])])
+	if check.get("hidden", 0) > 0:
+		skipped.append("%d hidden" % check["hidden"])
+	if not report["unreadable"].is_empty():
+		skipped.append("%d it could not read" % report["unreadable"].size())
+	return found + ("  Skipped: %s." % ", ".join(skipped) if not skipped.is_empty() else "")
+
+
+static func _s(count: Variant) -> String:
+	return "" if int(count) == 1 else "s"
 
 
 func show_sticks(sticks: Array) -> void:
@@ -93,7 +147,7 @@ func show_sticks(sticks: Array) -> void:
 		_stick_holder.add_child(_stick_picker)
 	if sticks.is_empty():
 		_clear_rows()
-		rows.add_child(empty_message("Plug in a USB drive with Films, TV, Music or Games folders."))
+		rows.add_child(empty_message("Plug in a USB drive. Any folders: the box finds the videos, music and games."))
 		_refresh_summary()
 		return
 	if _stick_picker != null:
@@ -105,8 +159,11 @@ func show_sticks(sticks: Array) -> void:
 func show_stick(stick: Dictionary) -> void:
 	_stick = stick
 	_clear_rows()
+	if _drive_checks.has(stick["stick_id"]):
+		var line := check_text(_drive_checks[stick["stick_id"]])
+		_check.text = line if _check.text.is_empty() else _check.text + "\n" + line
 	if stick["folders"].is_empty():
-		rows.add_child(empty_message("No Films, TV, Music or Games folders on \"%s\"." % stick["label"]))
+		rows.add_child(empty_message("No videos, music or games on \"%s\"." % stick["label"]))
 	for folder in stick["folders"]:
 		_add_folder(folder)
 	_refresh_summary()
@@ -233,7 +290,24 @@ func _ticked_bytes() -> float:
 	return total
 
 
+## Ticks everything that is not on the box yet, then copies it (after the space check).
+func copy_everything() -> void:
+	for key in _folders:
+		for item in _folders[key]["items"]:
+			_set_ticked(item["id"], true)
+			(_item_boxes[item["id"]] as TickBox).set_ticked(true)
+		_refresh_folder(key)
+	_refresh_summary()
+	if not _ticked.is_empty():
+		_copy()
+
+
 func _refresh_summary() -> void:
+	var has_new := false
+	for key in _folders:
+		has_new = has_new or not _folders[key]["items"].is_empty()
+	copy_all_button.disabled = not has_new
+	copy_all_button.focus_mode = Control.FOCUS_ALL if has_new else Control.FOCUS_NONE
 	var count := _ticked.size()
 	copy_button.disabled = count == 0
 	copy_button.focus_mode = Control.FOCUS_NONE if count == 0 else Control.FOCUS_ALL

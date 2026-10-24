@@ -9,6 +9,7 @@ import hashlib
 import json
 import logging
 import subprocess
+import time
 from pathlib import Path
 from typing import Protocol
 
@@ -30,8 +31,23 @@ class UsbStick(BaseModel):
     path: Path
 
 
+class UsbDrive(BaseModel):
+    """A USB filesystem as the drive check shows it: mounted, not mounted (and why), or not readable."""
+
+    id: str
+    label: str
+    device: str
+    filesystem: str | None
+    size_bytes: int | None
+    mounted: bool
+    supported: bool
+    # Why it is not mounted: the error from udisks, or "not supported".
+    problem: str | None
+
+
 class UsbBackend(Protocol):
     def sticks(self) -> list[UsbStick]: ...
+    def drives(self) -> list[UsbDrive]: ...
 
 
 def stick_id(device_key: str) -> str:
@@ -45,9 +61,10 @@ class BlockDevice(BaseModel):
     uuid: str | None
     mountpoint: str | None
     on_usb: bool
+    size_bytes: int | None = None
 
 
-LSBLK_COLUMNS = "PATH,FSTYPE,LABEL,UUID,MOUNTPOINT,TRAN,PKNAME"
+LSBLK_COLUMNS = "PATH,FSTYPE,LABEL,UUID,MOUNTPOINT,TRAN,PKNAME,SIZE"
 
 
 def parse_lsblk(output: str) -> list[BlockDevice]:
@@ -74,9 +91,18 @@ def parse_lsblk(output: str) -> list[BlockDevice]:
             uuid=entry.get("uuid"),
             mountpoint=entry.get("mountpoint"),
             on_usb=on_usb or entry.get("pkname") in usb_names,
+            size_bytes=_size(entry.get("size")),
         )
         for entry, on_usb in entries
     ]
+
+
+def _size(raw: object) -> int | None:
+    """lsblk -b gives the size in bytes, as a number or a string."""
+    try:
+        return int(raw) if raw is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 def usb_filesystems(devices: list[BlockDevice]) -> list[BlockDevice]:
@@ -97,23 +123,69 @@ def mount_options(filesystem: str) -> str:
     return MOUNT_OPTIONS + _PERMISSION_OPTIONS_BY_FILESYSTEM.get(filesystem, "")
 
 
+# A drive that would not mount is tried again after this long, not on every poll.
+MOUNT_RETRY_SECONDS = 60.0
+
+
+def drive_label(device: BlockDevice) -> str:
+    return device.label or (Path(device.mountpoint).name if device.mountpoint else Path(device.path).name)
+
+
+def drive_views(devices: list[BlockDevice], mount_errors: dict[str, str]) -> list[UsbDrive]:
+    views = [
+        UsbDrive(
+            id=stick_id(device.uuid or device.path), label=drive_label(device), device=device.path,
+            filesystem=device.filesystem, size_bytes=device.size_bytes, mounted=device.mountpoint is not None,
+            supported=True, problem=None if device.mountpoint else mount_errors.get(device.path),
+        )
+        for device in usb_filesystems(devices)
+    ]
+    views += [
+        UsbDrive(
+            id=stick_id(device.uuid or device.path), label=drive_label(device), device=device.path,
+            filesystem=device.filesystem, size_bytes=device.size_bytes, mounted=False, supported=False,
+            problem=f"The box cannot read {device.filesystem} drives. Use FAT32, exFAT, NTFS or ext4.",
+        )
+        for device in unsupported_usb_filesystems(devices)
+    ]
+    return views
+
+
 class UdisksUsb:
     """Mounts new USB filesystems with udisksctl and reports the mounted ones."""
 
+    def __init__(self) -> None:
+        # Device path -> (the error, when it was tried).
+        self._mount_errors: dict[str, tuple[str, float]] = {}
+
     def _devices(self) -> list[BlockDevice]:
         result = subprocess.run(
-            ["lsblk", "-J", "-o", LSBLK_COLUMNS],
+            ["lsblk", "-J", "-b", "-o", LSBLK_COLUMNS],
             capture_output=True, text=True, timeout=10, check=True,
         )
         return parse_lsblk(result.stdout)
 
     def _mount(self, device: BlockDevice) -> None:
+        failed = self._mount_errors.get(device.path)
+        if failed is not None and time.monotonic() - failed[1] < MOUNT_RETRY_SECONDS:
+            return
         result = subprocess.run(
             ["udisksctl", "mount", "--no-user-interaction", "-b", device.path, "-o", mount_options(device.filesystem or "")],
             capture_output=True, text=True, timeout=30,
         )
         if result.returncode != 0:
-            log.warning("Could not mount USB %s: %s", device.path, (result.stderr or result.stdout).strip())
+            error = (result.stderr or result.stdout).strip() or f"udisksctl exited with {result.returncode}"
+            log.warning("Could not mount USB %s: %s", device.path, error)
+            self._mount_errors[device.path] = (error, time.monotonic())
+        else:
+            self._mount_errors.pop(device.path, None)
+
+    def drives(self) -> list[UsbDrive]:
+        try:
+            devices = self._devices()
+        except (OSError, subprocess.SubprocessError):
+            return []
+        return drive_views(devices, {path: error for path, (error, _) in self._mount_errors.items()})
 
     def sticks(self) -> list[UsbStick]:
         try:
@@ -149,4 +221,11 @@ class FakeUsb:
             UsbStick(id=stick_id(str(folder)), label=folder.name, path=folder)
             for folder in sorted(self._root.iterdir())
             if folder.is_dir() and not folder.name.startswith(".")
+        ]
+
+    def drives(self) -> list[UsbDrive]:
+        return [
+            UsbDrive(id=stick.id, label=stick.label, device=str(stick.path), filesystem="vfat", size_bytes=None,
+                     mounted=True, supported=True, problem=None)
+            for stick in self.sticks()
         ]

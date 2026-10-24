@@ -136,7 +136,7 @@ def test_copy_usb_film_to_box_keeps_hidden_state(
     response = admin_client.post(f"/api/admin/content/{cars_id}/copy-to-box")
 
     assert response.status_code == 200, response.text
-    assert (media_dir / "Films" / "Cars (2006)" / "Cars.mkv").read_bytes() == b"usb film bytes"
+    assert (media_dir / "Videos" / "Cars (2006)" / "Cars.mkv").read_bytes() == b"usb film bytes"
     copies = [film for film in response.json()["films"] if film["title"] == "Cars"]
     # The box copy and the stick copy are the same file, so only the box one is listed.
     assert [(film["source"], film["hidden"]) for film in copies] == [("box", True)]

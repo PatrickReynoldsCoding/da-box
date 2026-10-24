@@ -10,10 +10,14 @@ const START_GRACE_SECONDS := 3.0
 var _title: String
 var _started_at := 0.0
 var _seen_playing := false
+var _stopped := false
+## Called with true when the video played to its end, false when it was stopped (a group plays its next video).
+var _on_end: Callable
 
 
-func _init(title: String) -> void:
+func _init(title: String, on_end: Callable = Callable()) -> void:
 	_title = title
+	_on_end = on_end
 
 
 func _ready() -> void:
@@ -41,6 +45,7 @@ func _ready() -> void:
 
 
 func go_back() -> void:
+	_stopped = true
 	Api.agent_post("/control", {"action": "stop"})
 
 
@@ -62,4 +67,7 @@ func _poll() -> void:
 		_seen_playing = true
 	var waited := Time.get_ticks_msec() / 1000.0 - _started_at
 	if idle and (_seen_playing or waited > START_GRACE_SECONDS):
+		var ended := _seen_playing and not _stopped
 		close_screen.emit()
+		if _on_end.is_valid():
+			_on_end.call(ended)

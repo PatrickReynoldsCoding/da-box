@@ -156,7 +156,7 @@ def programmes_for(channel: Channel, library: Library, durations: dict[str, floa
     """The channel's pool as a list of programmes, in pool order. Skips hidden items,
     USB items and files with no known length."""
     films = {film.id: film for film in library.films if film.source == "box"}
-    shows = {show.id: show for show in library.shows}
+    shows = {show.id: show for show in library.shows if show.source == "box"}
     albums = {album.id: album for album in library.albums if album.source == "box"}
     programmes: list[Programme] = []
 
@@ -175,7 +175,8 @@ def programmes_for(channel: Channel, library: Library, durations: dict[str, floa
         elif entry.kind is PoolKind.SHOW and entry.id in shows:
             show = shows[entry.id]
             for episode in show.episodes:
-                subtitle = f"S{episode.season} E{episode.number} · {episode.title}"
+                # Videos in a group without S01E02 markers (season 0) show only their title.
+                subtitle = f"S{episode.season} E{episode.number} · {episode.title}" if episode.season else episode.title
                 add(f"episode:{episode.id}", show.title, subtitle, episode.path, episode.fingerprint, show.id, show.id)
         elif entry.kind is PoolKind.ALBUM and entry.id in albums:
             album = albums[entry.id]

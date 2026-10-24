@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from dabox.models import Album, MediaSource
+from dabox.models import Album, MediaSource, Show
 from dabox.services import Services, get_services, require_box_client, require_parent_mode
 from dabox.usb import UsbStick
 from dabox.usb_copy import CopyProgress, SpaceCheck, StickItem, UsbStickTree, check_space, stick_item_for, stick_items, stick_tree
@@ -77,11 +77,11 @@ def usb_copy_stop(services: Services = Depends(get_services)) -> CopyProgress:
 
 @parent_router.post("/content/{item_id}/copy-to-box")
 def copy_item_to_box(item_id: str, services: Services = Depends(get_services)) -> CopyProgress:
-    """"Copy to the box" on one film, album or game. Runs as a copy job, so a big film does not block the TV."""
-    item = services.item_or_404(item_id)
+    """"Copy to the box" on one video, group, album or game. Runs as a copy job, so a big video does not block the TV."""
+    item = services.library.find_show(item_id) or services.item_or_404(item_id)
     if item.source is not MediaSource.USB:
         raise HTTPException(status_code=409, detail="This item is already on the box")
-    path = item.folder if isinstance(item, Album) else item.path
+    path = item.folder if isinstance(item, (Album, Show)) else item.path
     stick = next((stick for stick in services.library.library.sticks if path.is_relative_to(stick.path)), None)
     if stick is None:
         raise HTTPException(status_code=404, detail="That USB drive is not plugged in")

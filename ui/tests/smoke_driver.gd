@@ -85,10 +85,10 @@ func _run_main_screens() -> void:
 	await _shot("home")
 	await _press("ui_accept")
 	await _wait(2.0)
-	await _shot("films")
+	await _shot("videos")
 	await _press("ui_right")
 	await _wait(0.5)
-	await _shot("films-focus-second")
+	await _shot("videos-focus-second")
 	await _press("ui_cancel")
 	await _wait(0.5)
 	await _press("ui_right")
@@ -110,7 +110,7 @@ func _run_main_screens() -> void:
 
 
 func _run_tv() -> void:
-	# Back to Home, then the TV tile (left of Films).
+	# Back to Home, then the TV tile (left of Videos).
 	for i in 3:
 		await _press("ui_cancel")
 	await _wait(0.5)
@@ -136,7 +136,7 @@ func _run_tv() -> void:
 
 func _go_home() -> bool:
 	for i in 6:
-		if get_tree().root.find_child("FilmsTile", true, false) is Control and (get_tree().root.find_child("FilmsTile", true, false) as Control).is_visible_in_tree():
+		if get_tree().root.find_child("VideosTile", true, false) is Control and (get_tree().root.find_child("VideosTile", true, false) as Control).is_visible_in_tree():
 			return true
 		await _press("ui_cancel")
 		await _wait(0.4)

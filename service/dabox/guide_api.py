@@ -249,7 +249,8 @@ def pool_items(services: Services = Depends(get_services)) -> list[PoolItemView]
         if film.source is MediaSource.BOX:
             items.append(PoolItemView(kind=PoolKind.FILM, id=film.id, title=film.title, detail=str(film.year or "")))
     for show in library.shows:
-        items.append(PoolItemView(kind=PoolKind.SHOW, id=show.id, title=show.title, detail=f"{len(show.episodes)} episodes"))
+        if show.source is MediaSource.BOX:
+            items.append(PoolItemView(kind=PoolKind.SHOW, id=show.id, title=show.title, detail=f"{len(show.episodes)} videos"))
     for album in library.albums:
         if album.source is MediaSource.BOX:
             items.append(PoolItemView(kind=PoolKind.ALBUM, id=album.id, title=album.title, detail=album.artist))
@@ -263,7 +264,8 @@ def programme_choices(kind: ChannelKind, services: Services = Depends(get_servic
     pool = (
         [{"kind": "album", "id": album.id} for album in library.albums]
         if kind is ChannelKind.MUSIC
-        else [{"kind": "film", "id": film.id} for film in library.films] + [{"kind": "show", "id": show.id} for show in library.shows]
+        else [{"kind": "film", "id": film.id} for film in library.films]
+        + [{"kind": "show", "id": show.id} for show in library.shows if show.source is MediaSource.BOX]
     )
     probe = Channel(
         id="probe", number=0, name="probe", kind=kind, order="in_order", pool=pool, hours={day: None for day in Weekday},

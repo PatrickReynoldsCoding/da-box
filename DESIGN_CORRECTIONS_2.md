@@ -8,11 +8,11 @@ Found on a real Linux Mint laptop (2026-10-24) with a 1 TB Toshiba USB disk (exF
 
 | Item | Status | Next step |
 |---|---|---|
-| 1. Find media on a USB drive with any layout | Spec, decided | Build after 5 |
-| 2. One kind of video: videos and groups, no films or TV | Spec, decided | With 1 |
-| 3. Copy from USB for any drive | Spec (Copy from USB exists for the fixed layout) | After 1 and 2 |
+| 1. Find media on a USB drive with any layout | Done, tests with the real drive's names | Try it on the laptop with the Toshiba drive |
+| 2. One kind of video: videos and groups, no films or TV | Done, service and key tests | Try it on the laptop |
+| 3. Copy from USB for any drive | Done, service and key tests | Try it on the laptop |
 | 4. Posters and info on the box: keys, fetch, fix | Spec, decided | After 7 |
-| 5. USB drive check (why a drive shows nothing) | Spec | With 1 |
+| 5. USB drive check (why a drive shows nothing) | Done, service and key tests | Try it on the laptop |
 | 6. Tests for many kinds of USB drive | Done: 12 drive samples (2 real), udev rule test | Record more real drives |
 | 7. Settings screen on the box (Update da-box, Posters and info) | Done, tried on the laptop. Posters and info is a placeholder until part 4 | Part 4 |
 | 8. Remove da-box from the admin app (back to plain Linux) | Done, tests in the repo | Try it on the laptop (it removes da-box) |
@@ -310,3 +310,13 @@ None at the moment (answered 2026-10-24).
 - `service/tests/drives/`: 12 samples, one per kind of drive in 6.1. Two are real: the Mint laptop with the Toshiba disk (`ID_BUS=ata`, flat `lsblk`), and the Yoga PC with an empty USB card reader and 22 snap loop devices. The rest are typical; replace them with real recordings when those drives are to hand (`tests/drives/README.md`).
 - `tests/test_usb_drives.py`: for every sample, the partitions found, the ones named "not supported" (new: `unsupported_usb_filesystems` in `usb.py`), one id per drive, and the udev rule (a small udev evaluator reads `99-dabox-usb.rules`).
 - Checked that the tests catch both bugs from the laptop: the old `ID_BUS==usb` rule fails 4 tests, and detection without `PKNAME` fails 8.
+
+**Parts 1, 2, 3 and 5 (2026-10-24): done**, not yet tried on the laptop.
+- `service/dabox/names.py`: clean names, natural order, episode markers, track numbers, "Artist - Title". `tests/test_names.py` uses the real names from the Toshiba drive.
+- `service/dabox/library.py` walks every folder. A video in its own folder is named after it; several videos make a group (`Show` in the code, so box TV shows keep their ids); section folders (`Season 1`, `S02`, `Disc 1`, `Extras`) stay inside the group; generic folders (`Video`, `Films`, `TV`, `Temp`, …) are never one item. In the box's own `TV/`, every folder is a group, as before. Songs group by artist and album tags, like iTunes; folder names count only in `Music/<Artist>/<Album>/`. Games by extension, a zip with one game, a `.cue` that points at `.bin` files, a `.bin` in a Mega Drive folder. Each scan writes a report (found, other files, system folders, unreadable).
+- Decided while building: a video in a group keeps its title after the marker ("The Paradox of Intermediate Transactions") and shows its code beside it ("S5 E3"); only bracketed years count (`Blade Runner 2049` is a title), except in dotted scene names; a folder called `Series` or `Shows` is generic.
+- The walk runs in the background (the USB watcher), but not yet item by item: a drive's items show when its walk ends. The cache is the file fingerprints and durations, not a saved walk.
+- Box API: `GET /box/videos` (videos and groups), `GET /box/groups/{id}`, `POST /box/groups/{id}/resume`. Channels use box groups only. The admin app lists groups under Videos and can hide them.
+- TV: the Home tile is **Videos**; `videos_screen.gd` (was `films_screen.gd`) and `group_screen.gd` (Play, Play from the start, sections; the next video plays when one ends, if the limits allow it).
+- Copy from USB: the tick list by kind; **Copy everything**; copies go to `Videos/<name>/`, `Music/<artist>/<album>/NN <title>`, `Games/<system>/`; a different item with the same name gets " (2)"; a group on the box in part is finished in its own folder; groups keep their hidden state.
+- Drive check: `GET /box/usb/drives` and `/api/admin/usb/drives` (`drive_check.py`); udisks mount errors are kept and a failed drive is tried again after a minute; on the TV at the top of Copy from USB, in the admin app on Home.

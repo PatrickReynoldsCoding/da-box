@@ -123,22 +123,71 @@ for (const button of document.querySelectorAll("[data-extra-quota], [data-extra-
 }
 
 async function loadHome() {
-  const [status, sticks, today] = await Promise.all([api("/status"), api("/usb"), api("/today")]);
+  const [status, drives, today] = await Promise.all([api("/status"), api("/usb/drives"), api("/today")]);
   renderToday(today);
   renderParentMode(status.parent_mode);
-  $("#library-summary").textContent = `${status.film_count} films, ${status.album_count} albums. Time zone: ${status.timezone ?? "not set"}.`;
-  const rows = sticks.map((stick) => {
-    const row = document.createElement("li");
-    row.textContent = `${stick.label} (${stick.path})`;
-    return row;
-  });
+  $("#library-summary").textContent = `${status.film_count} videos, ${status.album_count} albums. Time zone: ${status.timezone ?? "not set"}.`;
+  const rows = drives.map(driveCheckRow);
   if (rows.length === 0) {
     const none = document.createElement("li");
     none.className = "muted";
-    none.textContent = "No USB stick in the box.";
+    none.textContent = "No USB drive in the box.";
     rows.push(none);
   }
   $("#usb-list").replaceChildren(...rows);
+}
+
+function sizeText(bytes) {
+  if (bytes == null) return "";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1000 && unit < units.length - 1) { value /= 1000; unit += 1; }
+  return `${value >= 10 || unit === 0 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
+}
+
+function plural(count, word) {
+  return `${count} ${word}${count === 1 ? "" : "s"}`;
+}
+
+// The drive check (DESIGN_CORRECTIONS_2.md, part 5): found, skipped, and why a drive is not read.
+function driveCheckRow(check) {
+  const { drive, report } = check;
+  const row = document.createElement("li");
+  const title = document.createElement("div");
+  title.className = "drive-title";
+  title.textContent = [drive.label, sizeText(drive.size_bytes), drive.filesystem].filter(Boolean).join(" · ");
+  row.append(title);
+  const lines = [];
+  if (!drive.supported || (!drive.mounted && drive.problem)) {
+    lines.push({ text: drive.problem ?? "This drive cannot be read.", kind: "error" });
+  } else if (!report) {
+    lines.push({ text: drive.mounted ? "Looking for media…" : "Not mounted yet.", kind: "muted" });
+  } else {
+    const found = [
+      plural(report.videos, "video"), plural(report.groups, "group"), plural(report.albums, "album"),
+      plural(report.songs, "song"), plural(report.games, "game"),
+    ];
+    lines.push({ text: `Found: ${found.join(", ")}.`, kind: "" });
+    const skipped = [];
+    const others = Object.entries(report.other_files).sort((a, b) => b[1] - a[1]);
+    if (others.length) {
+      const total = others.reduce((sum, [, count]) => sum + count, 0);
+      skipped.push(`${plural(total, "other file")} (${others.slice(0, 5).map(([ext, count]) => `${count} ${ext}`).join(", ")}${others.length > 5 ? ", …" : ""})`);
+    }
+    if (check.games_without_core) skipped.push(`${plural(check.games_without_core, "game")} with no emulator on the box`);
+    if (check.hidden) skipped.push(`${check.hidden} hidden by you`);
+    if (report.skipped_folders) skipped.push(`${plural(report.skipped_folders, "system folder")}`);
+    if (report.unreadable.length) skipped.push(`${plural(report.unreadable.length, "file")} the box could not read`);
+    if (skipped.length) lines.push({ text: `Skipped: ${skipped.join("; ")}.`, kind: "muted" });
+  }
+  for (const line of lines) {
+    const element = document.createElement("div");
+    element.className = `small ${line.kind}`;
+    element.textContent = line.text;
+    row.append(element);
+  }
+  return row;
 }
 
 $("#parent-mode").addEventListener("change", async (event) => {
@@ -153,7 +202,8 @@ const contentById = new Map();
 function itemRow(item, subtitle, artClass, kind) {
   contentById.set(item.id, { ...item, kind });
   const row = document.createElement("li");
-  row.addEventListener("click", () => openItem(item.id));
+  // Groups get art and details with "Posters and info" (DESIGN_CORRECTIONS_2.md, part 4).
+  if (kind !== "group") row.addEventListener("click", () => openItem(item.id));
   const art = item.art_url ? document.createElement("img") : document.createElement("div");
   if (item.art_url) {
     art.src = item.art_url;
@@ -200,8 +250,12 @@ function itemRow(item, subtitle, artClass, kind) {
 function renderContent(content) {
   const filmList = $("#film-list");
   contentById.clear();
-  filmList.replaceChildren(...content.films.map((film) => itemRow(film, film.year ?? "", null, "film")));
-  filmList.classList.toggle("empty", content.films.length === 0);
+  const videos = [
+    ...content.films.map((film) => ({ item: film, row: () => itemRow(film, film.year ?? "", null, "film") })),
+    ...content.groups.map((group) => ({ item: group, row: () => itemRow(group, `Group · ${plural(group.video_count, "video")}`, null, "group") })),
+  ].sort((a, b) => a.item.title.localeCompare(b.item.title, undefined, { numeric: true, sensitivity: "base" }));
+  filmList.replaceChildren(...videos.map((video) => video.row()));
+  filmList.classList.toggle("empty", videos.length === 0);
 
   const albumList = $("#album-list");
   albumList.replaceChildren(
