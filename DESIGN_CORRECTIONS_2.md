@@ -1,6 +1,6 @@
 # Kids TV Box: design doc CORRECTIONS 2
 
-USB drives with any layout, one kind of video (no films or TV), Copy from USB for every drive, and posters and info set up on the box.
+USB drives with any layout, one kind of video (no films or TV), Copy from USB for every drive, posters and info set up on the box, a Settings screen on the box, and removing da-box from the admin app.
 
 Found on a real Linux Mint laptop (2026-10-24) with a 1 TB Toshiba USB disk (exFAT) of everyday media.
 
@@ -11,9 +11,11 @@ Found on a real Linux Mint laptop (2026-10-24) with a 1 TB Toshiba USB disk (exF
 | 1. Find media on a USB drive with any layout | Spec, decided | Build after 5 |
 | 2. One kind of video: videos and groups, no films or TV | Spec, decided | With 1 |
 | 3. Copy from USB for any drive | Spec (Copy from USB exists for the fixed layout) | After 1 and 2 |
-| 4. Posters and info on the box: keys, fetch, fix | Spec | Answer open question 3 |
+| 4. Posters and info on the box: keys, fetch, fix | Spec, decided | After 7 |
 | 5. USB drive check (why a drive shows nothing) | Spec | With 1 |
 | 6. Tests for many kinds of USB drive | Spec | Start now |
+| 7. Settings screen on the box (Update da-box, Posters and info) | Spec, decided. Changes Update da-box (PR #2) | Next |
+| 8. Remove da-box from the admin app (back to plain Linux) | Spec, decided | Next |
 
 Already fixed in PR #3 (merged): the box did not see the disk at all (flat `lsblk` output), and it mounted it where the kid user cannot read it (`ID_BUS=ata`).
 
@@ -43,7 +45,11 @@ What the box showed: **2 albums**. Nothing else, because:
 
 1. **No films and TV.** Telling a film from a TV episode by its name is too hard to get right. The box has one kind: **videos**. A folder with several videos is a **group** (part 2).
 2. **Walk every folder** of a USB drive, to any depth.
-3. **Posters and info** (part 4) are set up on the box itself, including the API keys.
+3. **Posters and info** (part 4) are set up on the box itself, including the API keys. ScreenScraper (game descriptions) is an **option**, next to TMDB.
+4. **Songs without tags are grouped like iTunes:** by artist and album, with *Unknown Artist* and *Unknown Album* for what is missing.
+5. **A Settings screen on the box** (part 7) holds Update da-box and Posters and info. It does **not** need parent mode: anyone can use it. It is out of the way (not a big tile on Home), so kids do not press it by accident.
+6. **No automatic updates.** A person presses Update da-box.
+7. **The admin app can remove da-box** and give the machine back as plain Linux (part 8).
 
 ## 1. Find media on a USB drive with any layout
 
@@ -63,11 +69,13 @@ The box must find videos, music and games **anywhere** on a USB drive, with **an
 
 1. Read the tags of every audio file first (artist, album artist, album, track, title). Tags win over folder names.
 2. **Albums:** files with the same album artist (or artist) and album tag are one album, wherever they are on the drive.
-3. **No album tag:**
-   - The files in one folder (not the drive's top folder, and not a folder called `Music`) are one album, named after the folder.
-   - Loose files (open question 1) go together as **"Songs on <drive label>"**, sorted by artist and title.
-4. A title comes from the tag, else from the file name without the track number (`07 - Hello Goodbye.mp3` → *Hello Goodbye*; `(16) Nick Lowe - Raining Raining 1.mp3` → *Raining Raining 1*, artist *Nick Lowe*).
+3. **Missing tags, like iTunes:** each song gets an artist and an album, in this order:
+   - **Artist:** the artist tag; else the "Artist - Title" file name (`(16) Nick Lowe - Raining Raining 1.mp3` → *Nick Lowe*); else **Unknown Artist**.
+   - **Album:** the album tag; else **Unknown Album**. The folder name is not used as the album: on this drive 351 songs sit in one folder called `Music`.
+   - Songs then group into albums as in 2: one *Unknown Album* for each artist, and *Unknown Artist – Unknown Album* for songs with neither.
+4. A title comes from the tag, else from the file name without the track number and the artist (`07 - Hello Goodbye.mp3` → *Hello Goodbye*; `(16) Nick Lowe - Raining Raining 1.mp3` → *Raining Raining 1*).
 5. Double extensions are allowed (`20140606 131826.m4a.mp3`).
+6. Artists, Songs, Search and Shuffle all (DESIGN_CORRECTIONS_1.md, Music) see these songs the same as tagged ones.
 
 ### 1.3 Games
 
@@ -141,12 +149,12 @@ Copy from USB exists (DESIGN_CORRECTIONS_1.md, "Upload"): a **USB** tile on Home
 
 Changes:
 
-1. **The tick list shows what parts 1 and 2 found**, grouped by kind: Videos (videos and groups), Albums (and the "Songs" group), Games. Not the drive's own folders.
+1. **The tick list shows what parts 1 and 2 found**, grouped by kind: Videos (videos and groups), Albums, Games. Not the drive's own folders.
 2. **"Copy everything"** at the top of the list: one button for everything the box found that is not on the box yet. It goes through the same space check.
 3. **Copy puts each item into the box's layout**, with clean names:
    - video → `Videos/<Name>/<Name>.<ext>`, with its pictures, `.nfo` and subtitles (`.srt`, `.ass`, `.sub`)
    - group → `Videos/<Group>/…`, keeping its videos' names and its sub-folders
-   - album → `Music/<Artist>/<Album>/NN <Title>.<ext>`; the "Songs" group → `Music/<Artist>/Songs/…`
+   - album → `Music/<Artist>/<Album>/NN <Title>.<ext>`, also for *Unknown Artist* and *Unknown Album*
    - game → `Games/<system>/<file>`
 4. **Already on the box** is decided by the file's fingerprint (as today), not by its name. The renamed copy is still "on the box". A group that is on the box in part gets only its missing videos.
 5. Everything else stays as built: parent mode only, the space check (500 MB kept free), background job, progress bar on Home, stop, a pulled drive leaves no half item.
@@ -160,24 +168,24 @@ Changes:
 | Videos and groups | TMDB (The Movie Database) | A free API key from themoviedb.org |
 | Albums | MusicBrainz and Cover Art Archive | Nothing |
 | Games, box art | libretro-thumbnails | Nothing |
-| Games, descriptions | ScreenScraper | A free ScreenScraper account (open question 3) |
+| Games, descriptions (optional) | ScreenScraper | A free account on screenscraper.fr. Without it, games get box art only. |
 
 Without posters and info, the box still works: it shows the name on a plain coloured tile.
 
 Today the TMDB key can only be typed in the admin app on a phone, and nothing shows whether the look-up works (on the laptop, one album shows *not found* with no reason). DESIGN.md §4 kept keys out of the TV setup because long keys are hard to type with a controller. This part changes that decision: the parent can set it all up on the box.
 
-### 4.1 "Posters and info" screen on the TV (parent mode)
+### 4.1 Posters and info, in Settings on the TV
 
-A new button on Home in parent mode, next to "Update da-box" (open question 2).
+A section of the Settings screen (part 7). No parent mode needed.
 
-1. **Accounts:** one row per source in the table above. Each row shows *Not needed*, *Not set*, *Working* or *Not working: <reason>*.
+1. **Accounts:** one row per source in the table above. Each row shows *Not needed*, *Not set*, *Working* or *Not working: <reason>*. ScreenScraper has a user name and a password.
 2. **Enter a key** in two ways:
    - **On the TV**, with the on-screen keyboard (`ui/scripts/widgets/on_screen_keyboard.gd`).
    - **From a phone:** a TMDB key is 32 characters, hard to type with a controller. The TV shows a QR code that opens the admin app's Accounts page on the phone, where the key can be pasted. The TV row updates when it is saved.
 3. **Test:** after a key is saved, the box tries it at once (one TMDB request) and shows the result. A wrong key says so.
 4. **Status:** how many items have posters and info, how many wait, how many were not found, and the last error (for example *TMDB: Invalid API key*, *No internet*).
-5. **Look up again:** for everything not found, or for one item.
-6. **Fix a wrong match** on the TV: on a video, group or album in parent mode, "Posters and info" → search by name → pick from the results. The same as the admin app does today.
+5. **Look up now** (the scrape button): looks up everything that has no posters and info yet, and everything that was not found before. The status above shows its progress.
+6. **Fix a wrong match** on the TV: on a video, group or album in parent mode, "Posters and info" → search by name → pick from the results. The same as the admin app does today. (This one stays in parent mode: it changes what the kids see.)
 
 ### 4.2 Looking up
 
@@ -218,16 +226,47 @@ Today the tests cover the tree and flat `lsblk` outputs and the mount options. B
 6. **Look-up errors** (part 4): a wrong key, no internet, a 404, and the proxy allow-list check.
 7. **On a real machine** (the Mint laptop and the VM): plug in each drive kind that is to hand and check the drive check screen (part 5). Record the results in this doc.
 
+## 7. Settings screen on the box
+
+One place on the TV for box settings that anyone may use, out of the kids' way.
+
+1. **Where:** a small **Settings** button (a gear) at the bottom right of Home, not a big tile. It is always there, also when parent mode is off.
+2. **Inside, in this order:**
+   1. **Update da-box** (moved from Home's parent-mode row, PR #2): installed and newest version, Check again, Update.
+   2. **Posters and info** (part 4): accounts, status, Look up now.
+   3. **About:** the version, the box's address (`http://tvbox.local`) and a QR code for the admin app.
+3. **No parent mode needed.** The box API for these (`/box/software/*` today) moves from the parent-mode router to the plain box router. It stays **box only** (localhost): the network cannot use it.
+4. **Kids do not press it by accident:** the Settings button is small and last in the focus order on Home (Down from the tiles reaches it only after the other buttons). Update da-box and Look up now each ask "Are you sure?" with **No** focused first.
+5. The admin app keeps its own Update and Accounts (as today).
+
+## 8. Remove da-box from the admin app
+
+A way to give the machine back as plain Linux, without a terminal. Only in the **admin app** (PIN), never on the TV.
+
+1. **Where:** Settings → a last card, **Remove da-box**, in a warning colour.
+2. **Two choices:**
+   - **Remove da-box, keep the media:** the films, music and games stay in `/srv/dabox/media`, readable from Linux.
+   - **Remove everything:** also deletes the media, settings, and the `kid` and `tvbox` users (`uninstall.sh --purge`).
+3. **Confirm:** the parent types the PIN again and the word `REMOVE`. The card says what will happen: the TV turns off da-box, and the machine restarts into its normal Linux login screen.
+4. **What runs:** a root unit, `dabox-remove.service`, started by the service (polkit allows that one unit, as for the updates). It runs `install/uninstall.sh` (with `--purge` for "Remove everything"), then restarts the machine.
+   - `install.sh` must copy `uninstall.sh` onto the box (`/opt/dabox/bin/dabox-uninstall`). Today it is only in the git checkout.
+   - It must work while `--purge` deletes `/opt/dabox` itself (the update script has the same problem and the same fix: everything in functions).
+5. **What comes back** (what `uninstall.sh` does today, plus two gaps it has):
+   - the desktop login screen and other firewalls that the installer turned off (`/etc/dabox/turned-off`), the login consoles, SSH as before
+   - **new:** the machine's **old name**. The installer renames it `tvbox`; it must save the old name (`/etc/dabox/hostname-before`) and `uninstall.sh` must set it again.
+   - **new:** the **default target** before the install (`graphical.target` or `multi-user.target`).
+6. **After it:** the admin app shows "da-box is being removed. The machine restarts into Linux in about a minute." It cannot show more: the admin app goes away with da-box.
+7. **Tests:** service tests for the PIN and `REMOVE` check and for starting the unit (with a fake runner). On the Mint laptop: remove, check the desktop and the old name come back, then install again.
+
 ## Plan
 
-1. **Tests first (part 6, items 1 and 2):** collect samples from the laptop; add the udev rule test.
-2. **Walk the drive (part 1) and videos and groups (part 2)**, with the drive check (part 5) to see the result.
-3. **Copy from USB (part 3)** on top of parts 1 and 2.
-4. **Posters and info on the box (part 4).**
-5. Try each step on the laptop with the Toshiba drive. Update the status table.
+1. **Settings screen (part 7)** with Update da-box moved into it, and **Remove da-box (part 8)**: small, and they change things already built.
+2. **Tests for USB drives (part 6, items 1 and 2):** collect samples from the laptop; add the udev rule test.
+3. **Walk the drive (part 1) and videos and groups (part 2)**, with the drive check (part 5) to see the result.
+4. **Copy from USB (part 3)** on top of parts 1 and 2.
+5. **Posters and info (part 4)**, in the Settings screen.
+6. Try each step on the laptop with the Toshiba drive. Update the status table.
 
 ## Open questions
 
-1. **The 351 loose songs** in `Music/`: one "Songs on <drive>" group, or grouped by artist? Suggestion: by the artist tag, else by the "Artist - Title" file name, else "Songs".
-2. **Where the "Posters and info" button goes:** on Home in parent mode, next to "Update da-box" (suggested)? Or a new parent "Settings" screen with both buttons?
-3. **Game descriptions:** box art for games is free and needs no account (libretro-thumbnails). A short description of each game needs a ScreenScraper account (a free sign-up on screenscraper.fr), and look-ups there are slow. Is box art enough (suggested), or do you want the descriptions too?
+None at the moment (answered 2026-10-24).
