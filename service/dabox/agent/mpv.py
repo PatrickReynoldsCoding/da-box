@@ -56,6 +56,8 @@ class PlayItem(BaseModel):
     path: str
     title: str
     artist: str | None = None
+    # The service's id for a song, so Now playing can add it to a playlist.
+    song_id: str | None = None
 
 
 class PlayerStatus(BaseModel):
@@ -68,6 +70,7 @@ class PlayerStatus(BaseModel):
     position_seconds: float | None
     duration_seconds: float | None
     mode: PlayMode | None = None
+    song_id: str | None = None
     # Keys pressed in the mpv window that the UI must handle ("channel-up", "channel-down").
     requests: list[str] = []
 
@@ -210,6 +213,7 @@ class MpvPlayer:
             position_seconds=self._property("time-pos"),
             duration_seconds=self._property("duration"),
             mode=self._mode,
+            song_id=item.song_id if item else None,
             requests=requests,
         )
 

@@ -12,6 +12,10 @@ var _progress: ProgressBar
 var _time: Label
 var _pause_icon: Icon
 var _pause_button: Button
+var _add_button: Button
+var _add_hint: Label
+## The song that plays now, if it is on the box (only those can go on a playlist).
+var _song: Dictionary = {}
 
 
 func _init(art_url: Variant = "") -> void:
@@ -56,7 +60,21 @@ func _ready() -> void:
 	controls.add_child(_pause_button)
 	controls.add_child(_control_button(Icon.new(Icon.Kind.NEXT, UiTheme.TEXT, 80), "next"))
 	controls.add_child(_control_button(Icon.new(Icon.Kind.STOP, UiTheme.TEXT, 80), "stop"))
+	_add_button = Button.new()
+	_add_button.text = "+"
+	_add_button.tooltip_text = "Add to a playlist"
+	_add_button.custom_minimum_size = Vector2(150, 150)
+	_add_button.add_theme_font_size_override("font_size", 96)
+	_add_button.add_theme_stylebox_override("focus", UiTheme.focus_ring(24))
+	_add_button.add_theme_color_override("font_focus_color", UiTheme.TEXT)
+	_add_button.visible = false
+	_add_button.pressed.connect(_add_to_playlist)
+	FocusPop.attach(_add_button)
+	controls.add_child(_add_button)
 	right.add_child(controls)
+	_add_hint = UiTheme.muted_label("+  adds this song to a playlist")
+	_add_hint.visible = false
+	right.add_child(_add_hint)
 	row.add_child(right)
 	page_margin(row)
 
@@ -110,6 +128,18 @@ func _poll() -> void:
 	var paused: bool = status["state"] == "paused"
 	_pause_icon.kind = Icon.Kind.PLAY if paused else Icon.Kind.PAUSE
 	_pause_icon.queue_redraw()
+	var song_id: Variant = status.get("song_id")
+	_song = {"id": song_id, "title": _title.text, "artist": _artist.text} if song_id is String else {}
+	var can_add := not _song.is_empty()
+	if not can_add and _add_button.has_focus():
+		_pause_button.grab_focus()
+	_add_button.visible = can_add
+	_add_hint.visible = can_add
+
+
+func _add_to_playlist() -> void:
+	if not _song.is_empty():
+		open_screen.emit(AddToPlaylistScreen.new(_song))
 
 
 static func _clock(seconds: float) -> String:

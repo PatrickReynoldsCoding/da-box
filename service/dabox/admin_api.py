@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from dabox.auth import LockedOut, LoginSucceeded, NoPinSet, WrongPin
 from dabox.box_api import art_response
-from dabox.copying import CopyRejected, box_id_after_copy, copy_to_box
+from dabox.copying import CopyRejected, carry_over, copy_to_box
 from dabox.library import read_album_tags
 from dabox.metadata import Accounts, ArtOption, Candidate, Metadata, MetadataError
 from dabox.models import LimitSettings
@@ -178,20 +178,13 @@ def usb_sticks(services: Services = Depends(get_services)) -> list[UsbStick]:
 def copy_item_to_box(item_id: str, services: Services = Depends(get_services)) -> ContentView:
     item = services.item_or_404(item_id)
     media_dir = services.library.media_dir
+    if services.usb_copier.running():
+        raise HTTPException(status_code=409, detail="A copy from USB is running on the box. Try again when it ends.")
     try:
         destination = copy_to_box(item, media_dir)
     except CopyRejected as rejection:
         raise HTTPException(status_code=409, detail=str(rejection)) from rejection
-    # Box items get path-based ids, so carry the metadata and hidden state over.
-    new_id = box_id_after_copy(item, destination, media_dir)
-    metadata = services.metadata.store.get(item.id)
-    if metadata is not None:
-        if metadata.art_file:
-            cached = services.metadata.store.art_dir / metadata.art_file
-            metadata.art_file = services.metadata.store.save_art(new_id, cached.read_bytes())
-        services.metadata.store.put(new_id, metadata)
-    if item.id in services.store.hidden_item_ids():
-        services.store.set_hidden(new_id, True)
+    carry_over(item, destination, media_dir, services.store, services.metadata.store)
     services.rescan_library()
     return content(services)
 

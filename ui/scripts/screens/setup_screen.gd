@@ -128,6 +128,10 @@ func _input(event: InputEvent) -> void:
 	var target: Control = null
 	if focused == _back_button or focused == _next_button:
 		target = _footer_move(focused, event)
+		if target == null and (event.is_action_pressed("ui_left") or event.is_action_pressed("ui_right")):
+			# Left and Right only switch between Back and Next. With Next not ready, stay on Back.
+			get_viewport().set_input_as_handled()
+			return
 	elif event.is_action_pressed("ui_down") and _page_holder.is_ancestor_of(focused) and not _is_editing(focused):
 		var below := focused.find_valid_focus_neighbor(SIDE_BOTTOM)
 		if below == null or not _page_holder.is_ancestor_of(below):

@@ -224,9 +224,15 @@ def test_music_channel_only_takes_albums(guide_services: Services, admin_client:
     assert admin_client.post("/api/admin/channels", json=channel_body("Songs", "music", [{"kind": "album", "id": album}])).status_code == 200
 
 
+def todays_slots(client: TestClient, channel_id: str) -> list[dict]:
+    """Today's column of the admin app's week table."""
+    week = client.get("/api/admin/guide/week", params={"channel_id": channel_id}).json()
+    return [slot for slot in week["slots"] if slot["start"].startswith(week["today"])]
+
+
 def test_edit_slots_survive_regeneration(guide_services: Services, admin_client: TestClient) -> None:
     channel = admin_client.post("/api/admin/channels", json=channel_body("Cartoons", "video", [{"kind": "show", "id": show_id(guide_services)}])).json()
-    slots = admin_client.get("/api/admin/guide").json()["channels"][0]["slots"]
+    slots = todays_slots(admin_client, channel["id"])
     first, second = slots[0], slots[1]
 
     admin_client.post(f"/api/admin/guide/slots/{second['id']}/clear", json={"start": second["start"]})
@@ -237,7 +243,7 @@ def test_edit_slots_survive_regeneration(guide_services: Services, admin_client:
     assert placed.status_code == 200, placed.text
     admin_client.post("/api/admin/guide/generate")
 
-    slots = admin_client.get("/api/admin/guide").json()["channels"][0]["slots"]
+    slots = todays_slots(admin_client, channel["id"])
     assert (slots[0]["ref"], slots[0]["edited"]) == (film_ref, True)
     assert (slots[1]["title"], slots[1]["edited"]) == (None, True)
 
@@ -247,7 +253,7 @@ def test_edit_slots_survive_regeneration(guide_services: Services, admin_client:
     assert overlap.status_code == 422
 
     admin_client.post(f"/api/admin/guide/slots/{slots[1]['id']}/restore", json={"start": slots[1]["start"]})
-    slots = admin_client.get("/api/admin/guide").json()["channels"][0]["slots"]
+    slots = todays_slots(admin_client, channel["id"])
     assert slots[1]["title"] == "Bluey" and slots[1]["edited"] is False
 
 

@@ -296,3 +296,9 @@ main:has(#tab-guide:not([hidden])) { max-width: 1200px; }
 .guide-block.empty { background: var(--card); border-style: dashed; color: var(--muted); font-style: italic; }
 .badge.edited { background: var(--accent); color: var(--accent-text); }
 body.is-game #item-search, body.is-game #item-edit, body.is-game #art-options-button { display: none; }
+
+.playlist-songs li { display: flex; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px solid var(--border); }
+.playlist-songs li:first-child { border-top: 0; }
+.playlist-songs .title { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.playlist-songs button { padding: 6px 10px; }
+.playlist-songs.empty::after { content: "No songs yet. Add some below."; color: var(--muted); }
