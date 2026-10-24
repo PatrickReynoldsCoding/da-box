@@ -91,6 +91,7 @@ class EditRequest(BaseModel):
 
 class AccountsView(BaseModel):
     tmdb_api_key_set: bool
+    screenscraper_set: bool = False
 
 
 class AccountsRequest(BaseModel):
@@ -261,15 +262,18 @@ def reset_metadata(item_id: str, services: Services = Depends(get_services)) -> 
 
 @router.get("/accounts")
 def get_accounts(services: Services = Depends(get_services)) -> AccountsView:
-    return AccountsView(tmdb_api_key_set=bool(services.metadata.store.accounts().tmdb_api_key))
+    accounts = services.metadata.store.accounts()
+    return AccountsView(tmdb_api_key_set=bool(accounts.tmdb_api_key), screenscraper_set=accounts.screenscraper_set())
 
 
 @router.put("/accounts")
 def put_accounts(body: AccountsRequest, services: Services = Depends(get_services)) -> AccountsView:
     accounts = services.metadata.store.accounts()
     if body.tmdb_api_key is not None:
-        accounts = Accounts(tmdb_api_key=body.tmdb_api_key.strip())
+        # The other accounts (ScreenScraper) stay as they are.
+        accounts = accounts.model_copy(update={"tmdb_api_key": body.tmdb_api_key.strip()})
     services.metadata.save_accounts(accounts)
+    services.metadata.check_accounts()
     services.metadata_wanted.set()
     return get_accounts(services)
 

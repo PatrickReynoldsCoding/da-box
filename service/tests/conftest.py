@@ -46,7 +46,8 @@ class FakeAgent:
 
 
 class FakeHttp:
-    """Answers metadata requests from a dict of URL prefix -> JSON or bytes, and records the URLs."""
+    """Answers metadata requests from a dict of URL prefix -> JSON or bytes, and records the URLs.
+    An exception as the answer is raised (HttpError(401, ...), OSError for no internet)."""
 
     def __init__(self) -> None:
         self.responses: dict[str, object] = {}
@@ -56,7 +57,10 @@ class FakeHttp:
         self.requested.append(url)
         for prefix in sorted(self.responses, key=len, reverse=True):
             if url.startswith(prefix):
-                return self.responses[prefix]
+                answer = self.responses[prefix]
+                if isinstance(answer, Exception):
+                    raise answer
+                return answer
         raise HttpError(404, url)
 
     def get_json(self, url: str, headers: dict[str, str] | None = None) -> object:

@@ -31,6 +31,8 @@ func _run() -> void:
 	await _test_settings_update_asks_first()
 	await _test_videos_tiles()
 	await _test_group_screen()
+	await _test_posters_settings()
+	await _test_match_screen()
 	print("Key tests: %d checks, %d failed" % [_checks, _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
 
@@ -214,7 +216,7 @@ func _test_music_screens_open() -> void:
 	_check(progress._back_button.text == "Done" and progress._status.text.begins_with("USB removed"), "progress: the end message")
 	await _close(progress)
 
-	var usb_item := UsbItemScreen.new("Cars", "u1", func() -> void: pass)
+	var usb_item := ItemActionsScreen.new("Cars", "u1", func() -> void: pass)
 	await _show(usb_item)
 	_check(_focus() == usb_item.play_button, "USB item: starts on Play")
 	await _press("ui_right")
@@ -334,17 +336,17 @@ func _test_settings_update_asks_first() -> void:
 	await _frames()
 	_check(not settings._confirm_row.visible and _focus() == settings._update_button, "settings: Back on the question means No")
 
-	# Below Update there is only text: Down scrolls to it, Up scrolls back.
+	# Down goes through the buttons, then scrolls the text below the last one (About); Up goes back.
 	var scroll := settings.key_scroll
 	scroll.scroll_vertical = 0
 	await _frames()
 	var bar := scroll.get_v_scroll_bar()
 	_check(bar.max_value > bar.page, "settings: the screen is taller than the TV (the test needs a scroll)")
-	for i in 10:
+	for i in 16:
 		await _press("ui_down")
 	_check(scroll.scroll_vertical >= int(bar.max_value - bar.page), "settings: Down scrolls to the bottom")
-	_check(_focus() == settings._update_button, "settings: scrolling keeps the focus on Update")
-	for i in 10:
+	_check(_focus() == settings._lookup_button, "settings: the last button is Look up now")
+	for i in 16:
 		await _press("ui_up")
 	_check(scroll.scroll_vertical == 0, "settings: Up scrolls back to the top")
 	await _close(settings)
@@ -407,6 +409,63 @@ func _test_group_screen() -> void:
 	await _frames()
 	_check(group._group["resume_index"] == 0, "group: after the last video, Play starts from the beginning again")
 	await _close(group)
+
+
+# ---- Posters and info (DESIGN_CORRECTIONS_2.md, part 4) ----
+
+func _test_posters_settings() -> void:
+	var settings := SettingsScreen.new()
+	await _show(settings)
+	settings.show_posters({
+		"accounts": [
+			{"key": "tmdb", "name": "TMDB", "used_for": "Posters and details for videos and groups", "state": "not_working", "reason": "The key or password is wrong."},
+			{"key": "musicbrainz", "name": "MusicBrainz", "used_for": "Album covers", "state": "not_needed", "reason": null},
+		],
+		"done": 3, "waiting": 0, "not_found": 2, "failed": 1, "no_account": 4, "last_error": "Home Movie: No internet, or the site cannot be reached.",
+	})
+	await _frames()
+	var rows: Array[String] = []
+	for child in settings._accounts.get_children():
+		rows.append(child.text)
+	_check(rows == ["TMDB  ·  Posters and details for videos and groups  ·  Not working: The key or password is wrong.",
+		"MusicBrainz  ·  Album covers  ·  No key needed"], "posters: each source and its state (got %s)" % [rows])
+	_check(settings._posters_status.text == "3 have posters and info, 4 wait for a TMDB key, 2 not found, 1 failed.\nLast problem: Home Movie: No internet, or the site cannot be reached.",
+		"posters: the counts and the last problem (got %s)" % settings._posters_status.text)
+	settings._lookup_button.grab_focus()
+	await _press("ui_accept")
+	_check(settings._lookup_confirm.visible and _focus() == settings._lookup_no, "posters: Look up now asks first, with No focused")
+	settings.go_back()
+	await _frames()
+	_check(not settings._lookup_confirm.visible and _focus() == settings._lookup_button, "posters: Back on the question means No")
+
+	var opened: Array = []
+	settings.open_screen.connect(func(screen: Screen) -> void: opened.append(screen))
+	settings._enter_screenscraper()
+	_check(opened.size() == 1 and opened[0] is TextEntryScreen and opened[0]._title == "ScreenScraper user name", "posters: ScreenScraper asks for the user name first")
+	opened[0].entered.emit("me")
+	await _frames()
+	_check(opened.size() == 2 and opened[1]._title == "ScreenScraper password" and opened[1]._secret, "posters: then the password, hidden")
+	for screen in opened:
+		screen.free()
+	await _close(settings)
+
+
+func _test_match_screen() -> void:
+	var screen := MatchScreen.new("g1", "Fargo (2014) Season 5")
+	await _show(screen)
+	screen.show_results([
+		{"provider": "tmdb", "provider_id": "tv:9", "title": "Fargo", "year": 2014, "artist": null, "description": "TV series. A crime story.", "preview_url": null},
+		{"provider": "tmdb", "provider_id": "movie:2", "title": "Fargo", "year": 1996, "artist": null, "description": null, "preview_url": null},
+	])
+	await _frames()
+	_check(_focus() == screen._results.get_child(0), "match: starts on the first result")
+	_check((screen._results.get_child(0) as Button).text == "Fargo (2014)   —   TV series. A crime story.", "match: a result shows its title, year and details")
+	await _press("ui_up")
+	_check(_focus() == screen._search_button, "match: Up goes to the search, to change it")
+	screen.show_results([])
+	await _frames()
+	_check(screen._message.text == "Nothing found. Change the search." and _focus() == screen._search_button, "match: nothing found goes to the search")
+	await _close(screen)
 
 
 func _joy_event(button: JoyButton, device: int, pressed: bool = true) -> InputEventJoypadButton:

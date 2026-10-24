@@ -209,14 +209,28 @@
         </form>
 
         <form id="accounts-form" class="card">
-          <h2>Metadata accounts</h2>
-          <p class="muted">Film art and details come from TMDB. Get a free API key at themoviedb.org (Settings → API). Music art needs no account.</p>
-          <p id="tmdb-status" class="muted"></p>
+          <h2>Posters and info</h2>
+          <p class="muted">The box looks up posters, covers, box art and short details on the internet. Videos and groups need a free TMDB key (themoviedb.org → Settings → API). Album covers and game box art need no account.</p>
+          <ul id="poster-sources" class="plain drive-checks"></ul>
+          <p id="poster-counts" class="muted small"></p>
           <label>TMDB API key or read access token <input name="tmdb_api_key" autocomplete="off"></label>
           <div class="row">
             <button type="submit">Save key</button>
             <button type="button" id="remove-tmdb" class="secondary">Remove key</button>
+            <button type="button" id="look-up-now" class="secondary">Look up now</button>
           </div>
+          <details>
+            <summary>ScreenScraper (optional): game descriptions</summary>
+            <p class="muted small">Your screenscraper.fr account, and the developer id and password ScreenScraper's API also needs (free: ask for them on the ScreenScraper forum).</p>
+            <label>User name <input name="screenscraper_user" autocomplete="off"></label>
+            <label>Password <input name="screenscraper_password" type="password" autocomplete="off"></label>
+            <label>Developer id <input name="screenscraper_dev_id" autocomplete="off"></label>
+            <label>Developer password <input name="screenscraper_dev_password" type="password" autocomplete="off"></label>
+            <div class="row">
+              <button type="button" id="save-screenscraper">Save ScreenScraper account</button>
+              <button type="button" id="remove-screenscraper" class="secondary">Remove</button>
+            </div>
+          </details>
           <p class="message"></p>
         </form>
 

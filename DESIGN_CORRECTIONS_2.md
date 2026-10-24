@@ -11,7 +11,7 @@ Found on a real Linux Mint laptop (2026-10-24) with a 1 TB Toshiba USB disk (exF
 | 1. Find media on a USB drive with any layout | Done, tests with the real drive's names | Try it on the laptop with the Toshiba drive |
 | 2. One kind of video: videos and groups, no films or TV | Done, service and key tests | Try it on the laptop |
 | 3. Copy from USB for any drive | Done, service and key tests | Try it on the laptop |
-| 4. Posters and info on the box: keys, fetch, fix | Spec, decided | After 7 |
+| 4. Posters and info on the box: keys, fetch, fix | Done, service and key tests. ScreenScraper tested with a fake server only | Try it on the laptop with a TMDB key |
 | 5. USB drive check (why a drive shows nothing) | Done, service and key tests | Try it on the laptop |
 | 6. Tests for many kinds of USB drive | Done: 12 drive samples (2 real), udev rule test | Record more real drives |
 | 7. Settings screen on the box (Update da-box, Posters and info) | Done, tried on the laptop. Posters and info is a placeholder until part 4 | Part 4 |
@@ -320,3 +320,13 @@ None at the moment (answered 2026-10-24).
 - TV: the Home tile is **Videos**; `videos_screen.gd` (was `films_screen.gd`) and `group_screen.gd` (Play, Play from the start, sections; the next video plays when one ends, if the limits allow it).
 - Copy from USB: the tick list by kind; **Copy everything**; copies go to `Videos/<name>/`, `Music/<artist>/<album>/NN <title>`, `Games/<system>/`; a different item with the same name gets " (2)"; a group on the box in part is finished in its own folder; groups keep their hidden state.
 - Drive check: `GET /box/usb/drives` and `/api/admin/usb/drives` (`drive_check.py`); udisks mount errors are kept and a failed drive is tried again after a minute; on the TV at the top of Copy from USB, in the admin app on Home.
+
+**Part 4, Posters and info (2026-10-24): done**, not yet tried on the laptop.
+- TMDB searches films and TV series together; a group prefers TV series, and an exact title comes first. "Fargo (2014) Season 5" is searched as "Fargo", 2014 (`search_terms`). TMDB ids say their kind (`movie:1`, `tv:7`); older records with the bare film id still work.
+- Groups get posters and info like videos, in the background and in the admin app.
+- Keys are tried when saved (TMDB `/configuration`, ScreenScraper `ssuserInfos.php`); each source is *No key needed*, *Not set*, *Working* or *Not working: <reason>*. A failed look-up keeps its reason; the last one shows in Settings.
+- ScreenScraper (optional) adds a game's name, year and description to the libretro box art. Its API needs a developer id and password as well as the user's account, so Settings asks for all four. Tested with a fake ScreenScraper only.
+- Routes: `GET /box/posters`, `PUT /box/posters/accounts`, `POST /box/posters/lookup` (box only, no parent mode), the same under `/api/admin/posters`; fix a match on the TV: `POST /box/content/{id}/metadata/search` and `/apply` (parent mode). `/box/admin-qr.png?target=accounts` opens the admin app's key form.
+- A test checks that the proxy allow-list (`install/files/dabox-filter`) lets every source through.
+- TV: Settings → Posters and info (sources, Enter TMDB key, ScreenScraper account, Use a phone, the counts, Look up now with "Are you sure?"); `text_entry_screen.gd`; `match_screen.gd` from "Posters and info" on a video (parent mode, `item_actions_screen.gd`, was `usb_item_screen.gd`), a group or an album.
+- Admin app: Settings → Posters and info, with the sources, the counts, Look up now and the ScreenScraper fields; groups open the details dialog like videos.

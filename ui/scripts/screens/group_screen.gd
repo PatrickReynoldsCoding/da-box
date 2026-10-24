@@ -12,6 +12,7 @@ var _title: Label
 var _count: Label
 var _videos: VBoxContainer
 var _copy_button: Button
+var _posters_button: Button
 var _message: Label
 ## The first focusable row: Play.
 var _play_button: Button
@@ -44,6 +45,11 @@ func _ready() -> void:
 	_copy_button.visible = false
 	_copy_button.pressed.connect(_copy_to_box)
 	left.add_child(_copy_button)
+	_posters_button = Button.new()
+	_posters_button.text = "Posters and info"
+	_posters_button.visible = false
+	_posters_button.pressed.connect(func() -> void: open_screen.emit(MatchScreen.new(_group_id, _group.get("title", ""))))
+	left.add_child(_posters_button)
 	row.add_child(left)
 
 	var scroll := ScrollContainer.new()
@@ -91,6 +97,7 @@ func show_group(group: Dictionary) -> void:
 	var videos: Array = group["videos"]
 	_count.text = "%d videos" % videos.size()
 	_copy_button.visible = group["source"] == "usb" and Api.parent_mode()
+	_posters_button.visible = Api.parent_mode()
 	var resume: int = group["resume_index"]
 	var play_text := "Play" if resume == 0 else "Play: %s" % _video_label(videos[resume])
 	_play_button = _row_button(play_text, play_from.bind(resume), UiTheme.FILMS)

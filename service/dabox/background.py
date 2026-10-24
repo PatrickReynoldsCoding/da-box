@@ -49,7 +49,7 @@ class BackgroundWorkers:
         services = self._services
         library = services.library.library
         fetched = 0
-        for item in services.metadata.items_to_fetch([*library.films, *library.albums, *library.games]):
+        for item in services.metadata.items_to_fetch([*library.films, *library.shows, *library.albums, *library.games]):
             if self._stop.is_set():
                 break
             try:

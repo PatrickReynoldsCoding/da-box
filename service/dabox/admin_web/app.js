@@ -67,7 +67,14 @@ async function start() {
   if (session.setup_required) return showView("setup");
   if (!session.logged_in) return showView("login");
   showView("main");
-  showTab("home");
+  openFirstTab();
+}
+
+// The TV's "Use a phone" QR code opens the key form (#accounts).
+function openFirstTab() {
+  if (location.hash !== "#accounts") return showTab("home");
+  showTab("settings");
+  setTimeout(() => $("#accounts-form").scrollIntoView({ behavior: "smooth" }), 300);
 }
 
 // ---- Login ----
@@ -202,8 +209,7 @@ const contentById = new Map();
 function itemRow(item, subtitle, artClass, kind) {
   contentById.set(item.id, { ...item, kind });
   const row = document.createElement("li");
-  // Groups get art and details with "Posters and info" (DESIGN_CORRECTIONS_2.md, part 4).
-  if (kind !== "group") row.addEventListener("click", () => openItem(item.id));
+  row.addEventListener("click", () => openItem(item.id));
   const art = item.art_url ? document.createElement("img") : document.createElement("div");
   if (item.art_url) {
     art.src = item.art_url;
@@ -589,14 +595,16 @@ function itemMessage(text, kind) {
 }
 
 function renderItem(item) {
-  document.body.classList.toggle("is-film", item.kind === "film");
+  // A group gets the same details as a video: TMDB search, year, plot.
+  const videoLike = item.kind === "film" || item.kind === "group";
+  document.body.classList.toggle("is-film", videoLike);
   document.body.classList.toggle("is-album", item.kind === "album");
   document.body.classList.toggle("is-game", item.kind === "game");
   const art = $("#item-art");
   art.src = item.art_url ? `${item.art_url}?v=${Date.now()}` : "";
   art.style.visibility = item.art_url ? "visible" : "hidden";
   $("#item-title").textContent = item.title;
-  $("#item-sub").textContent = item.kind === "film" ? (item.year ?? "") : `${item.artist}${item.year ? ` · ${item.year}` : ""}`;
+  $("#item-sub").textContent = videoLike ? (item.year ?? "") : `${item.artist}${item.year ? ` · ${item.year}` : ""}`;
   $("#item-status").textContent = STATUS_TEXT[item.metadata_status] ?? "Using the files' own details.";
 
   const edit = $("#item-edit");
@@ -1335,25 +1343,69 @@ $("#remove-form").addEventListener("submit", async (event) => {
 
 // ---- Accounts ----
 
+const ACCOUNT_STATES = { not_needed: "No key needed", not_set: "Not set", working: "Working", not_working: "Not working" };
+
+function renderPosters(status) {
+  $("#poster-sources").replaceChildren(...status.accounts.map((account) => {
+    const row = document.createElement("li");
+    const state = ACCOUNT_STATES[account.state] + (account.reason ? `: ${account.reason}` : "");
+    row.textContent = `${account.name} · ${account.used_for} · ${state}`;
+    row.className = account.state === "not_working" ? "error" : "";
+    return row;
+  }));
+  const parts = [`${status.done} have posters and info`];
+  if (status.waiting) parts.push(`${status.waiting} to look up`);
+  if (status.no_account) parts.push(`${status.no_account} wait for a TMDB key`);
+  if (status.not_found) parts.push(`${status.not_found} not found`);
+  if (status.failed) parts.push(`${status.failed} failed`);
+  $("#poster-counts").textContent = parts.join(", ") + "." + (status.last_error ? ` Last problem: ${status.last_error}` : "");
+}
+
 async function loadAccounts() {
-  const accounts = await api("/accounts");
-  $("#tmdb-status").textContent = accounts.tmdb_api_key_set ? "A TMDB key is saved." : "No TMDB key yet.";
+  renderPosters(await api("/posters"));
+}
+
+async function savePosterAccounts(fields, done) {
+  const message = $(".message", $("#accounts-form"));
+  setMessage(message, "Checking…", "");
+  try {
+    const status = await api("/posters/accounts", { method: "PUT", body: fields });
+    renderPosters(status);
+    const failed = status.accounts.find((account) => account.state === "not_working");
+    setMessage(message, failed ? `${failed.name}: ${failed.reason}` : done, failed ? "error" : "ok");
+  } catch (error) {
+    setMessage(message, error.message, "error");
+  }
 }
 
 $("#accounts-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.target;
-  const message = $(".message", form);
-  if (!form.tmdb_api_key.value.trim()) return setMessage(message, "Paste a key first.", "error");
-  await api("/accounts", { method: "PUT", body: { tmdb_api_key: form.tmdb_api_key.value } });
-  form.reset();
-  setMessage(message, "Saved. The box now fetches film art.", "ok");
-  loadAccounts();
+  if (!form.tmdb_api_key.value.trim()) return setMessage($(".message", form), "Paste a key first.", "error");
+  await savePosterAccounts({ tmdb_api_key: form.tmdb_api_key.value }, "Saved. The box now looks up posters for videos.");
+  form.tmdb_api_key.value = "";
 });
 
-$("#remove-tmdb").addEventListener("click", async () => {
-  await api("/accounts", { method: "PUT", body: { tmdb_api_key: "" } });
-  loadAccounts();
+$("#remove-tmdb").addEventListener("click", () => savePosterAccounts({ tmdb_api_key: "" }, "The TMDB key is removed."));
+
+const SCREENSCRAPER_FIELDS = ["screenscraper_user", "screenscraper_password", "screenscraper_dev_id", "screenscraper_dev_password"];
+
+$("#save-screenscraper").addEventListener("click", async () => {
+  const form = $("#accounts-form");
+  const fields = Object.fromEntries(SCREENSCRAPER_FIELDS.map((name) => [name, form[name].value]));
+  if (Object.values(fields).some((value) => !value.trim())) {
+    return setMessage($(".message", form), "Fill in all four ScreenScraper fields.", "error");
+  }
+  await savePosterAccounts(fields, "Saved. Games now get descriptions too.");
+  for (const name of SCREENSCRAPER_FIELDS) form[name].value = "";
+});
+
+$("#remove-screenscraper").addEventListener("click", () =>
+  savePosterAccounts(Object.fromEntries(SCREENSCRAPER_FIELDS.map((name) => [name, ""])), "The ScreenScraper account is removed."));
+
+$("#look-up-now").addEventListener("click", async () => {
+  renderPosters(await api("/posters/lookup", { method: "POST" }));
+  setMessage($(".message", $("#accounts-form")), "Looking up everything without posters and info. This takes a while.", "ok");
 });
 
 $("#rerun-setup").addEventListener("click", async () => {

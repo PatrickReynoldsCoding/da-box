@@ -171,8 +171,11 @@ def leave_parent_mode(services: Services = Depends(get_services)) -> None:
 
 
 @router.get("/admin-qr.png")
-def admin_qr(services: Services = Depends(get_services)) -> Response:
+def admin_qr(target: str | None = None, services: Services = Depends(get_services)) -> Response:
+    """The admin app's address. `target=accounts` opens its key form (Settings on the TV)."""
     url = admin_urls(services.admin_port, services.network.status().ip_address)[0]
+    if target == "accounts":
+        url += "/#accounts"
     buffer = io.BytesIO()
     segno.make(url, error="m").save(buffer, kind="png", scale=10, border=2)
     return Response(content=buffer.getvalue(), media_type="image/png")

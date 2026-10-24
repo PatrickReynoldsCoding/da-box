@@ -62,10 +62,10 @@ static func video_seconds(video: Dictionary) -> float:
 	return video["seconds"] if video.get("seconds") != null else UNKNOWN_SECONDS
 
 
-## In parent mode a USB video can also be copied to the box.
+## In parent mode a video also has "Posters and info", and a USB video "Copy to the box".
 func _pick(video: Dictionary) -> void:
-	if Api.parent_mode() and video.get("source") == "usb":
-		open_screen.emit(UsbItemScreen.new(video["title"], video["id"], _play.bind(video)))
+	if Api.parent_mode():
+		open_screen.emit(ItemActionsScreen.new(video["title"], video["id"], _play.bind(video), video.get("source") == "usb", true))
 	else:
 		_play(video)
 

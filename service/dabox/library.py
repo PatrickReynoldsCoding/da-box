@@ -705,9 +705,9 @@ class LibraryIndex:
             self._library = scan_library(self._media_dir, current_sticks)
             return self._library
 
-    def find(self, item_id: str) -> Film | Album | Game | None:
+    def find(self, item_id: str) -> Film | Show | Album | Game | None:
         library = self._library
-        for item in [*library.films, *library.albums, *library.games]:
+        for item in [*library.films, *library.shows, *library.albums, *library.games]:
             if item.id == item_id:
                 return item
         return None

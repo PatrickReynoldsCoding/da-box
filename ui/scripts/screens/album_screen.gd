@@ -40,6 +40,12 @@ func _ready() -> void:
 	_copy_button.visible = false
 	_copy_button.pressed.connect(_copy_to_box)
 	left.add_child(_copy_button)
+	var posters := Button.new()
+	posters.text = "Posters and info"
+	posters.name = "PostersButton"
+	posters.visible = false
+	posters.pressed.connect(func() -> void: open_screen.emit(MatchScreen.new(_album_id, _album.get("title", ""))))
+	left.add_child(posters)
 	row.add_child(left)
 
 	var scroll := ScrollContainer.new()
@@ -77,6 +83,7 @@ func _load() -> void:
 		_cover.texture = await Api.texture(_album["art_url"])
 
 	_copy_button.visible = _album["source"] == "usb" and Api.parent_mode()
+	(_copy_button.get_parent().get_node("PostersButton") as Button).visible = Api.parent_mode()
 	_tracks.add_child(_track_button("Play all", _play.bind(0), UiTheme.MUSIC))
 	_tracks.add_child(_track_button("Shuffle", _shuffle, UiTheme.MUSIC.darkened(0.25)))
 	var number := 1

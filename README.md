@@ -51,7 +51,7 @@ The service enforces the limits, not the UI. It checks what the player agent is 
 
 ## Admin app
 
-Open http://tvbox.local on a phone on the home Wi-Fi and enter the PIN. Tabs: Home (today's time, extra time, parent mode, USB sticks), Content (hide/show, art and details, copy from USB, playlists), Channels, Guide, Upload, Activity (last 7 days), Settings (limits, colour theme and sounds, TMDB key, PIN, backup and restore, system update, da-box version and update, run setup again).
+Open http://tvbox.local on a phone on the home Wi-Fi and enter the PIN. Tabs: Home (today's time, extra time, parent mode, USB sticks), Content (hide/show, art and details, copy from USB, playlists), Channels, Guide, Upload, Activity (last 7 days), Settings (limits, colour theme and sounds, posters and info: TMDB key and optional ScreenScraper account, PIN, backup and restore, system update, da-box version and update, run setup again, remove da-box). On the TV, Settings (the gear on Home) has Update da-box and Posters and info too; keys can be typed there or pasted on a phone through a QR code.
 
 ## Run it on the Mac (dev mode)
 
