@@ -9,7 +9,7 @@ See [DESIGN.md](DESIGN.md) for the full design.
 | Folder | What it is |
 |---|---|
 | `service/` | Python (FastAPI) package `dabox`: box API for the UI (localhost only), admin API + web app (PIN), library scan, settings, setup. Also `dabox.agent`, the player agent that controls mpv. |
-| `ui/` | Godot 4 box UI (Home, TV guide, channels, Films, Music with artists, songs, search and playlists, Games, Copy from USB, first-run setup, sleeping screen). Arrow keys + Enter + Esc, or a game controller (stick or d-pad to move, A = OK, B or Back/Select = back). |
+| `ui/` | Godot 4 box UI (Home, TV guide, channels, Films, Music with artists, songs, search and playlists, Games, Copy from USB, first-run setup, sleeping screen). Arrow keys + Enter + Esc, or a game controller (stick or d-pad to move, A = OK, B or Back/Select = back, the Guide button or Back on Home = power menu). |
 | `install/` | `install.sh` for an apt-based box (Raspberry Pi OS, Debian 12+, Ubuntu 22.04+, Linux Mint 21+; arm64 or x86_64), `uninstall.sh`, plus systemd, PAM, polkit and firewall files. |
 | `vm/` | `box-vm.sh`: a QEMU VM (Mac, Windows or Linux host) that acts as the real box, and a desktop VM like Linux Mint. |
 | `dev/` | `run-dev.sh` (run everything on the Mac) and `make-test-media.sh` (test films and music with ffmpeg). |
@@ -24,18 +24,26 @@ cage kiosk                     dabox-service :80
       └─ HTTP ─▶ dabox-agent :8091 ─▶ mpv
 ```
 
-## Media folders
+## Media
+
+**USB drives can have any folders.** The box reads every folder (not `$RECYCLE.BIN`, `System Volume Information` and the like) and finds:
+
+- **Videos.** A folder with one video is one video, named after the folder; a loose video is named after its file. A folder with several videos is a **group**, played in order (by `S01E02` markers, else by name with numbers as numbers); sub-folders such as `Season 1` or `Extras` are sections of it. Release tags (`1080p`, `x265`, `WEB-DL`, …) are taken out of names. There are no "films" and "TV": the Home tile is **Videos**.
+- **Music**, by its tags, like iTunes. Without tags: the artist from "Artist - Title" in the file name, else *Unknown Artist*; the album *Unknown Album*.
+- **Games**, by extension (`.nes .sfc .smc .gb .gbc .gba .md .gen .smd .cue .chd .pbp`; `.zip` with one game inside; `.bin` in a Mega Drive folder). Mega Drive and PlayStation need `install.sh --extra-cores`.
+
+The admin app (Home → USB drives) and the TV (USB tile, parent mode) show what the box found on each drive, what it skipped, and why a drive is not read (for example a Mac drive).
+
+**Copy from USB:** turn on parent mode, plug the drive in, and pick the USB tile on Home. Tick kinds (Videos, Albums, Games) or single items, or press **Copy everything**. The box checks the space, copies in the background (the box can be used meanwhile), skips what it already has (by the files' content, not their names), and puts each item in its own layout:
 
 ```
-Films/<Title (Year)>/<file>.mp4   (+ poster.jpg, movie.nfo)
-TV/<Show>/Season 01/<Show> S01E01 - <Title>.mp4
-Music/<Artist>/<Album>/01 <Song>.mp3   (+ cover.jpg)
-Games/<system>/<Game>.nes          systems: nes snes gb gbc gba megadrive psx
+Videos/<Name>/<file>.mp4        (+ its pictures, .nfo and subtitles)
+Videos/<Group>/...              (a group, with its sections)
+Music/<Artist>/<Album>/07 <Song>.mp3   (+ cover.jpg)
+Games/<system>/<Game>.nes       systems: nes snes gb gbc gba megadrive psx
 ```
 
-The same layout works on a USB stick. Mega Drive and PlayStation need `install.sh --extra-cores`.
-
-To copy a whole drive to the box: turn on parent mode, plug the drive in, and pick the USB tile on Home. Tick folders or single items; the box checks the space, copies in the background (the box can be used meanwhile), skips items it already has, and fetches art and details at the end.
+The box's older `Films/` and `TV/` folders are still read, and their items keep their ids (channels, hidden items and art stay).
 
 ## Limits
 
@@ -43,7 +51,7 @@ The service enforces the limits, not the UI. It checks what the player agent is 
 
 ## Admin app
 
-Open http://tvbox.local on a phone on the home Wi-Fi and enter the PIN. Tabs: Home (today's time, extra time, parent mode, USB sticks), Content (hide/show, art and details, copy from USB, playlists), Channels, Guide, Upload, Activity (last 7 days), Settings (limits, colour theme and sounds, TMDB key, PIN, backup and restore, system update, da-box version and update, run setup again).
+Open http://tvbox.local on a phone on the home Wi-Fi and enter the PIN. Tabs: Home (today's time, extra time, parent mode, USB sticks), Content (hide/show, art and details, copy from USB, playlists), Channels, Guide, Upload, Activity (last 7 days), Settings (limits, colour theme and sounds, posters and info: TMDB key and optional ScreenScraper account, PIN, backup and restore, system update, da-box version and update, run setup again, remove da-box). On the TV, Settings (the gear on Home) has Update da-box and Posters and info too; keys can be typed there or pasted on a phone through a QR code.
 
 ## Run it on the Mac (dev mode)
 

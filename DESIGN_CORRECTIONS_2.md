@@ -1,6 +1,6 @@
 # Kids TV Box: design doc CORRECTIONS 2
 
-USB drives with any layout, one kind of video (no films or TV), Copy from USB for every drive, posters and info set up on the box, a Settings screen on the box, and removing da-box from the admin app.
+USB drives with any layout, one kind of video (no films or TV), Copy from USB for every drive, posters and info set up on the box, a Settings screen on the box, removing da-box from the admin app, and a power menu.
 
 Found on a real Linux Mint laptop (2026-10-24) with a 1 TB Toshiba USB disk (exFAT) of everyday media.
 
@@ -8,14 +8,15 @@ Found on a real Linux Mint laptop (2026-10-24) with a 1 TB Toshiba USB disk (exF
 
 | Item | Status | Next step |
 |---|---|---|
-| 1. Find media on a USB drive with any layout | Spec, decided | Build after 5 |
-| 2. One kind of video: videos and groups, no films or TV | Spec, decided | With 1 |
-| 3. Copy from USB for any drive | Spec (Copy from USB exists for the fixed layout) | After 1 and 2 |
-| 4. Posters and info on the box: keys, fetch, fix | Spec, decided | After 7 |
-| 5. USB drive check (why a drive shows nothing) | Spec | With 1 |
-| 6. Tests for many kinds of USB drive | Spec | Start now |
+| 1. Find media on a USB drive with any layout | Done, tests with the real drive's names | Try it on the laptop with the Toshiba drive |
+| 2. One kind of video: videos and groups, no films or TV | Done, service and key tests | Try it on the laptop |
+| 3. Copy from USB for any drive | Done, service and key tests | Try it on the laptop |
+| 4. Posters and info on the box: keys, fetch, fix | Done, service and key tests. ScreenScraper tested with a fake server only | Try it on the laptop with a TMDB key |
+| 5. USB drive check (why a drive shows nothing) | Done, service and key tests | Try it on the laptop |
+| 6. Tests for many kinds of USB drive | Done: 12 drive samples (2 real), udev rule test | Record more real drives |
 | 7. Settings screen on the box (Update da-box, Posters and info) | Done, tried on the laptop. Posters and info is a placeholder until part 4 | Part 4 |
 | 8. Remove da-box from the admin app (back to plain Linux) | Done, tests in the repo | Try it on the laptop (it removes da-box) |
+| 9. Power menu: Esc on Home or the Guide button, then Shut down | Done, service and key tests | Try the Guide button on the 8BitDo |
 
 Already fixed in PR #3 (merged): the box did not see the disk at all (flat `lsblk` output), and it mounted it where the kid user cannot read it (`ID_BUS=ata`).
 
@@ -50,6 +51,7 @@ What the box showed: **2 albums**. Nothing else, because:
 5. **A Settings screen on the box** (part 7) holds Update da-box and Posters and info. It does **not** need parent mode: anyone can use it. It is out of the way (not a big tile on Home), so kids do not press it by accident.
 6. **No automatic updates.** A person presses Update da-box.
 7. **The admin app can remove da-box** and give the machine back as plain Linux (part 8).
+8. **A power menu** on the TV (part 9), with one choice for now: Shut down.
 
 ## 1. Find media on a USB drive with any layout
 
@@ -258,6 +260,20 @@ A way to give the machine back as plain Linux, without a terminal. Only in the *
 6. **After it:** the admin app shows "da-box is being removed. The machine restarts into Linux in about a minute." It cannot show more: the admin app goes away with da-box.
 7. **Tests:** service tests for the PIN and `REMOVE` check and for starting the unit (with a fake runner). On the Mint laptop: remove, check the desktop and the old name come back, then install again.
 
+## 9. Power menu
+
+A way to turn the box off from the TV, without a keyboard or the power button.
+
+1. **Open it:**
+   - **Esc** (keyboard) or **B** (controller) **on Home**. Home has nothing to go back to, so Back there opens the power menu.
+   - The controller's **Guide button** on **any screen**: the Xbox button, the PlayStation button, the Home button on 8BitDo and Nintendo-style pads (Godot: `JOY_BUTTON_GUIDE`).
+   - Not while a video or game plays: there the Guide button does nothing. Videos stop with B; games quit through RetroArch's own combo.
+2. **What it shows:** a small panel over the screen with **Shut down** and **Cancel**. **Cancel** has the focus first, so a kid who opens it by accident does not turn the box off. B or Esc means Cancel.
+3. **Shut down** asks the service to turn the box off (`POST /box/power/off`, box only, any user; the service already may power off through polkit, for bedtime). Before that the TV shows "Turning off…".
+4. No parent mode needed: anyone may turn the TV box off.
+5. **Later:** more choices can go in this menu (Restart, Sleep). Only Shut down for now.
+6. **Tests:** key tests for Esc on Home, the Guide button on another screen, Cancel focused first, B means Cancel; a service test that the route calls the power backend and that the network cannot use it.
+
 ## Plan
 
 1. **Settings screen (part 7)** with Update da-box moved into it, and **Remove da-box (part 8)**: small, and they change things already built.
@@ -265,7 +281,8 @@ A way to give the machine back as plain Linux, without a terminal. Only in the *
 3. **Walk the drive (part 1) and videos and groups (part 2)**, with the drive check (part 5) to see the result.
 4. **Copy from USB (part 3)** on top of parts 1 and 2.
 5. **Posters and info (part 4)**, in the Settings screen.
-6. Try each step on the laptop with the Toshiba drive. Update the status table.
+6. **Power menu (part 9).**
+7. Try each step on the laptop with the Toshiba drive. Update the status table.
 
 ## Open questions
 
@@ -288,3 +305,34 @@ None at the moment (answered 2026-10-24).
 - `uninstall.sh`: new `--reboot`; gives the name and target back; runs from functions, so `--purge` can delete it while it runs.
 - Tests: the word, the PIN, the lockout, keep and purge (fake runner), the admin login. The polkit rule checked with node. The new restore steps dry-run with fake commands.
 - A machine renamed to `tvbox` by an older install (the Mint laptop) has no saved old name: it stays `tvbox` after removal. Rename it with `sudo hostnamectl set-hostname <name>`.
+
+**Part 6, USB drive tests (2026-10-24): done.**
+- `service/tests/drives/`: 12 samples, one per kind of drive in 6.1. Two are real: the Mint laptop with the Toshiba disk (`ID_BUS=ata`, flat `lsblk`), and the Yoga PC with an empty USB card reader and 22 snap loop devices. The rest are typical; replace them with real recordings when those drives are to hand (`tests/drives/README.md`).
+- `tests/test_usb_drives.py`: for every sample, the partitions found, the ones named "not supported" (new: `unsupported_usb_filesystems` in `usb.py`), one id per drive, and the udev rule (a small udev evaluator reads `99-dabox-usb.rules`).
+- Checked that the tests catch both bugs from the laptop: the old `ID_BUS==usb` rule fails 4 tests, and detection without `PKNAME` fails 8.
+
+**Parts 1, 2, 3 and 5 (2026-10-24): done**, not yet tried on the laptop.
+- `service/dabox/names.py`: clean names, natural order, episode markers, track numbers, "Artist - Title". `tests/test_names.py` uses the real names from the Toshiba drive.
+- `service/dabox/library.py` walks every folder. A video in its own folder is named after it; several videos make a group (`Show` in the code, so box TV shows keep their ids); section folders (`Season 1`, `S02`, `Disc 1`, `Extras`) stay inside the group; generic folders (`Video`, `Films`, `TV`, `Temp`, …) are never one item. In the box's own `TV/`, every folder is a group, as before. Songs group by artist and album tags, like iTunes; folder names count only in `Music/<Artist>/<Album>/`. Games by extension, a zip with one game, a `.cue` that points at `.bin` files, a `.bin` in a Mega Drive folder. Each scan writes a report (found, other files, system folders, unreadable).
+- Decided while building: a video in a group keeps its title after the marker ("The Paradox of Intermediate Transactions") and shows its code beside it ("S5 E3"); only bracketed years count (`Blade Runner 2049` is a title), except in dotted scene names; a folder called `Series` or `Shows` is generic.
+- The walk runs in the background (the USB watcher), but not yet item by item: a drive's items show when its walk ends. The cache is the file fingerprints and durations, not a saved walk.
+- Box API: `GET /box/videos` (videos and groups), `GET /box/groups/{id}`, `POST /box/groups/{id}/resume`. Channels use box groups only. The admin app lists groups under Videos and can hide them.
+- TV: the Home tile is **Videos**; `videos_screen.gd` (was `films_screen.gd`) and `group_screen.gd` (Play, Play from the start, sections; the next video plays when one ends, if the limits allow it).
+- Copy from USB: the tick list by kind; **Copy everything**; copies go to `Videos/<name>/`, `Music/<artist>/<album>/NN <title>`, `Games/<system>/`; a different item with the same name gets " (2)"; a group on the box in part is finished in its own folder; groups keep their hidden state.
+- Drive check: `GET /box/usb/drives` and `/api/admin/usb/drives` (`drive_check.py`); udisks mount errors are kept and a failed drive is tried again after a minute; on the TV at the top of Copy from USB, in the admin app on Home.
+
+**Part 4, Posters and info (2026-10-24): done**, not yet tried on the laptop.
+- TMDB searches films and TV series together; a group prefers TV series, and an exact title comes first. "Fargo (2014) Season 5" is searched as "Fargo", 2014 (`search_terms`). TMDB ids say their kind (`movie:1`, `tv:7`); older records with the bare film id still work.
+- Groups get posters and info like videos, in the background and in the admin app.
+- Keys are tried when saved (TMDB `/configuration`, ScreenScraper `ssuserInfos.php`); each source is *No key needed*, *Not set*, *Working* or *Not working: <reason>*. A failed look-up keeps its reason; the last one shows in Settings.
+- ScreenScraper (optional) adds a game's name, year and description to the libretro box art. Its API needs a developer id and password as well as the user's account, so Settings asks for all four. Tested with a fake ScreenScraper only.
+- Routes: `GET /box/posters`, `PUT /box/posters/accounts`, `POST /box/posters/lookup` (box only, no parent mode), the same under `/api/admin/posters`; fix a match on the TV: `POST /box/content/{id}/metadata/search` and `/apply` (parent mode). `/box/admin-qr.png?target=accounts` opens the admin app's key form.
+- A test checks that the proxy allow-list (`install/files/dabox-filter`) lets every source through.
+- TV: Settings → Posters and info (sources, Enter TMDB key, ScreenScraper account, Use a phone, the counts, Look up now with "Are you sure?"); `text_entry_screen.gd`; `match_screen.gd` from "Posters and info" on a video (parent mode, `item_actions_screen.gd`, was `usb_item_screen.gd`), a group or an album.
+- Admin app: Settings → Posters and info, with the sources, the counts, Look up now and the ScreenScraper fields; groups open the details dialog like videos.
+
+**Part 9, Power menu (2026-10-24): done**, not yet tried on the laptop.
+- `power_menu_screen.gd`: a panel over the screen (`overlay` in `screen.gd`: the screen below stays visible), Cancel focused first, the focus kept inside the panel, B or Esc means Cancel.
+- Opens with Back on Home, or the Guide button (`JOY_BUTTON_GUIDE`) on any screen but a playing video or game (`main.gd`).
+- `POST /box/power/off` (box only, any user): stops what plays, then powers off, as at bedtime.
+- Not tried yet: whether the 8BitDo's Home button reaches Godot as the Guide button on Linux (some pads keep it for their own use).

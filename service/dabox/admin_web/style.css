@@ -302,3 +302,7 @@ body.is-game #item-search, body.is-game #item-edit, body.is-game #art-options-bu
 .playlist-songs .title { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .playlist-songs button { padding: 6px 10px; }
 .playlist-songs.empty::after { content: "No songs yet. Add some below."; color: var(--muted); }
+.drive-checks li { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.drive-checks li:last-child { border-bottom: none; }
+.drive-checks .drive-title { font-weight: 600; }
+.drive-checks .error { color: var(--danger); }

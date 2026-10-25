@@ -67,7 +67,14 @@ async function start() {
   if (session.setup_required) return showView("setup");
   if (!session.logged_in) return showView("login");
   showView("main");
-  showTab("home");
+  openFirstTab();
+}
+
+// The TV's "Use a phone" QR code opens the key form (#accounts).
+function openFirstTab() {
+  if (location.hash !== "#accounts") return showTab("home");
+  showTab("settings");
+  setTimeout(() => $("#accounts-form").scrollIntoView({ behavior: "smooth" }), 300);
 }
 
 // ---- Login ----
@@ -123,22 +130,71 @@ for (const button of document.querySelectorAll("[data-extra-quota], [data-extra-
 }
 
 async function loadHome() {
-  const [status, sticks, today] = await Promise.all([api("/status"), api("/usb"), api("/today")]);
+  const [status, drives, today] = await Promise.all([api("/status"), api("/usb/drives"), api("/today")]);
   renderToday(today);
   renderParentMode(status.parent_mode);
-  $("#library-summary").textContent = `${status.film_count} films, ${status.album_count} albums. Time zone: ${status.timezone ?? "not set"}.`;
-  const rows = sticks.map((stick) => {
-    const row = document.createElement("li");
-    row.textContent = `${stick.label} (${stick.path})`;
-    return row;
-  });
+  $("#library-summary").textContent = `${status.film_count} videos, ${status.album_count} albums. Time zone: ${status.timezone ?? "not set"}.`;
+  const rows = drives.map(driveCheckRow);
   if (rows.length === 0) {
     const none = document.createElement("li");
     none.className = "muted";
-    none.textContent = "No USB stick in the box.";
+    none.textContent = "No USB drive in the box.";
     rows.push(none);
   }
   $("#usb-list").replaceChildren(...rows);
+}
+
+function sizeText(bytes) {
+  if (bytes == null) return "";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1000 && unit < units.length - 1) { value /= 1000; unit += 1; }
+  return `${value >= 10 || unit === 0 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
+}
+
+function plural(count, word) {
+  return `${count} ${word}${count === 1 ? "" : "s"}`;
+}
+
+// The drive check (DESIGN_CORRECTIONS_2.md, part 5): found, skipped, and why a drive is not read.
+function driveCheckRow(check) {
+  const { drive, report } = check;
+  const row = document.createElement("li");
+  const title = document.createElement("div");
+  title.className = "drive-title";
+  title.textContent = [drive.label, sizeText(drive.size_bytes), drive.filesystem].filter(Boolean).join(" · ");
+  row.append(title);
+  const lines = [];
+  if (!drive.supported || (!drive.mounted && drive.problem)) {
+    lines.push({ text: drive.problem ?? "This drive cannot be read.", kind: "error" });
+  } else if (!report) {
+    lines.push({ text: drive.mounted ? "Looking for media…" : "Not mounted yet.", kind: "muted" });
+  } else {
+    const found = [
+      plural(report.videos, "video"), plural(report.groups, "group"), plural(report.albums, "album"),
+      plural(report.songs, "song"), plural(report.games, "game"),
+    ];
+    lines.push({ text: `Found: ${found.join(", ")}.`, kind: "" });
+    const skipped = [];
+    const others = Object.entries(report.other_files).sort((a, b) => b[1] - a[1]);
+    if (others.length) {
+      const total = others.reduce((sum, [, count]) => sum + count, 0);
+      skipped.push(`${plural(total, "other file")} (${others.slice(0, 5).map(([ext, count]) => `${count} ${ext}`).join(", ")}${others.length > 5 ? ", …" : ""})`);
+    }
+    if (check.games_without_core) skipped.push(`${plural(check.games_without_core, "game")} with no emulator on the box`);
+    if (check.hidden) skipped.push(`${check.hidden} hidden by you`);
+    if (report.skipped_folders) skipped.push(`${plural(report.skipped_folders, "system folder")}`);
+    if (report.unreadable.length) skipped.push(`${plural(report.unreadable.length, "file")} the box could not read`);
+    if (skipped.length) lines.push({ text: `Skipped: ${skipped.join("; ")}.`, kind: "muted" });
+  }
+  for (const line of lines) {
+    const element = document.createElement("div");
+    element.className = `small ${line.kind}`;
+    element.textContent = line.text;
+    row.append(element);
+  }
+  return row;
 }
 
 $("#parent-mode").addEventListener("change", async (event) => {
@@ -200,8 +256,12 @@ function itemRow(item, subtitle, artClass, kind) {
 function renderContent(content) {
   const filmList = $("#film-list");
   contentById.clear();
-  filmList.replaceChildren(...content.films.map((film) => itemRow(film, film.year ?? "", null, "film")));
-  filmList.classList.toggle("empty", content.films.length === 0);
+  const videos = [
+    ...content.films.map((film) => ({ item: film, row: () => itemRow(film, film.year ?? "", null, "film") })),
+    ...content.groups.map((group) => ({ item: group, row: () => itemRow(group, `Group · ${plural(group.video_count, "video")}`, null, "group") })),
+  ].sort((a, b) => a.item.title.localeCompare(b.item.title, undefined, { numeric: true, sensitivity: "base" }));
+  filmList.replaceChildren(...videos.map((video) => video.row()));
+  filmList.classList.toggle("empty", videos.length === 0);
 
   const albumList = $("#album-list");
   albumList.replaceChildren(
@@ -535,14 +595,16 @@ function itemMessage(text, kind) {
 }
 
 function renderItem(item) {
-  document.body.classList.toggle("is-film", item.kind === "film");
+  // A group gets the same details as a video: TMDB search, year, plot.
+  const videoLike = item.kind === "film" || item.kind === "group";
+  document.body.classList.toggle("is-film", videoLike);
   document.body.classList.toggle("is-album", item.kind === "album");
   document.body.classList.toggle("is-game", item.kind === "game");
   const art = $("#item-art");
   art.src = item.art_url ? `${item.art_url}?v=${Date.now()}` : "";
   art.style.visibility = item.art_url ? "visible" : "hidden";
   $("#item-title").textContent = item.title;
-  $("#item-sub").textContent = item.kind === "film" ? (item.year ?? "") : `${item.artist}${item.year ? ` · ${item.year}` : ""}`;
+  $("#item-sub").textContent = videoLike ? (item.year ?? "") : `${item.artist}${item.year ? ` · ${item.year}` : ""}`;
   $("#item-status").textContent = STATUS_TEXT[item.metadata_status] ?? "Using the files' own details.";
 
   const edit = $("#item-edit");
@@ -1281,25 +1343,69 @@ $("#remove-form").addEventListener("submit", async (event) => {
 
 // ---- Accounts ----
 
+const ACCOUNT_STATES = { not_needed: "No key needed", not_set: "Not set", working: "Working", not_working: "Not working" };
+
+function renderPosters(status) {
+  $("#poster-sources").replaceChildren(...status.accounts.map((account) => {
+    const row = document.createElement("li");
+    const state = ACCOUNT_STATES[account.state] + (account.reason ? `: ${account.reason}` : "");
+    row.textContent = `${account.name} · ${account.used_for} · ${state}`;
+    row.className = account.state === "not_working" ? "error" : "";
+    return row;
+  }));
+  const parts = [`${status.done} have posters and info`];
+  if (status.waiting) parts.push(`${status.waiting} to look up`);
+  if (status.no_account) parts.push(`${status.no_account} wait for a TMDB key`);
+  if (status.not_found) parts.push(`${status.not_found} not found`);
+  if (status.failed) parts.push(`${status.failed} failed`);
+  $("#poster-counts").textContent = parts.join(", ") + "." + (status.last_error ? ` Last problem: ${status.last_error}` : "");
+}
+
 async function loadAccounts() {
-  const accounts = await api("/accounts");
-  $("#tmdb-status").textContent = accounts.tmdb_api_key_set ? "A TMDB key is saved." : "No TMDB key yet.";
+  renderPosters(await api("/posters"));
+}
+
+async function savePosterAccounts(fields, done) {
+  const message = $(".message", $("#accounts-form"));
+  setMessage(message, "Checking…", "");
+  try {
+    const status = await api("/posters/accounts", { method: "PUT", body: fields });
+    renderPosters(status);
+    const failed = status.accounts.find((account) => account.state === "not_working");
+    setMessage(message, failed ? `${failed.name}: ${failed.reason}` : done, failed ? "error" : "ok");
+  } catch (error) {
+    setMessage(message, error.message, "error");
+  }
 }
 
 $("#accounts-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.target;
-  const message = $(".message", form);
-  if (!form.tmdb_api_key.value.trim()) return setMessage(message, "Paste a key first.", "error");
-  await api("/accounts", { method: "PUT", body: { tmdb_api_key: form.tmdb_api_key.value } });
-  form.reset();
-  setMessage(message, "Saved. The box now fetches film art.", "ok");
-  loadAccounts();
+  if (!form.tmdb_api_key.value.trim()) return setMessage($(".message", form), "Paste a key first.", "error");
+  await savePosterAccounts({ tmdb_api_key: form.tmdb_api_key.value }, "Saved. The box now looks up posters for videos.");
+  form.tmdb_api_key.value = "";
 });
 
-$("#remove-tmdb").addEventListener("click", async () => {
-  await api("/accounts", { method: "PUT", body: { tmdb_api_key: "" } });
-  loadAccounts();
+$("#remove-tmdb").addEventListener("click", () => savePosterAccounts({ tmdb_api_key: "" }, "The TMDB key is removed."));
+
+const SCREENSCRAPER_FIELDS = ["screenscraper_user", "screenscraper_password", "screenscraper_dev_id", "screenscraper_dev_password"];
+
+$("#save-screenscraper").addEventListener("click", async () => {
+  const form = $("#accounts-form");
+  const fields = Object.fromEntries(SCREENSCRAPER_FIELDS.map((name) => [name, form[name].value]));
+  if (Object.values(fields).some((value) => !value.trim())) {
+    return setMessage($(".message", form), "Fill in all four ScreenScraper fields.", "error");
+  }
+  await savePosterAccounts(fields, "Saved. Games now get descriptions too.");
+  for (const name of SCREENSCRAPER_FIELDS) form[name].value = "";
+});
+
+$("#remove-screenscraper").addEventListener("click", () =>
+  savePosterAccounts(Object.fromEntries(SCREENSCRAPER_FIELDS.map((name) => [name, ""])), "The ScreenScraper account is removed."));
+
+$("#look-up-now").addEventListener("click", async () => {
+  renderPosters(await api("/posters/lookup", { method: "POST" }));
+  setMessage($(".message", $("#accounts-form")), "Looking up everything without posters and info. This takes a while.", "ok");
 });
 
 $("#rerun-setup").addEventListener("click", async () => {

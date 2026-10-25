@@ -3,7 +3,7 @@ import shutil
 from pathlib import Path
 from typing import BinaryIO
 
-from dabox.library import AUDIO_EXTENSIONS, FILMS_FOLDER, MUSIC_FOLDER, UNKNOWN_ARTIST, VIDEO_EXTENSIONS
+from dabox.library import AUDIO_EXTENSIONS, FILMS_FOLDER, MUSIC_FOLDER, UNKNOWN_ALBUM, UNKNOWN_ARTIST, VIDEO_EXTENSIONS
 
 _UNSAFE_CHARACTERS = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
 _ALLOWED_ART_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png"})
@@ -44,7 +44,7 @@ def film_poster_destination(media_dir: Path, title: str, year: int | None, file_
 
 def music_destination(media_dir: Path, artist: str, album: str, file_name: str) -> Path:
     artist_folder = safe_path_component(artist or UNKNOWN_ARTIST)
-    album_folder = safe_path_component(album or "Unknown album")
+    album_folder = safe_path_component(album or UNKNOWN_ALBUM)
     return media_dir / MUSIC_FOLDER / artist_folder / album_folder / _checked_file_name(file_name, AUDIO_EXTENSIONS)
 
 

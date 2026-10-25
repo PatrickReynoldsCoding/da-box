@@ -1,7 +1,9 @@
-"""Copies films, albums, games and TV shows from a USB stick to the box, keeping their metadata and hidden state.
+"""Copies videos, groups, albums and games from a USB stick to the box, keeping their metadata and hidden state.
 
+Each item goes into the box's own layout with a clean name, wherever it was on the stick
+(DESIGN_CORRECTIONS_2.md, part 3): Videos/<name>/, Music/<artist>/<album>/, Games/<system>/.
 Files are written under a hidden ".partial" name and renamed at the end. A new folder
-(a film, an album, a new show) is built whole under its ".partial" name, so a pulled
+(a video, an album, a new group) is built whole under its ".partial" name, so a pulled
 stick never leaves half an item on the box.
 """
 
@@ -10,13 +12,15 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from dabox.library import FILMS_FOLDER, GAMES_FOLDER, MUSIC_FOLDER, TV_FOLDER, ItemNamer
+from dabox.library import GAMES_FOLDER, MUSIC_FOLDER, VIDEOS_FOLDER, ItemNamer, item_id
 from dabox.metadata import MetadataStore
-from dabox.models import Album, Film, Game, MediaSource, Show
+from dabox.models import Album, Film, Game, Library, MediaSource, Show
 from dabox.store import Store
 from dabox.uploads import safe_path_component
 
 _COPY_CHUNK = 4 * 1024 * 1024
+# What goes with a loose video: its art, details and subtitles.
+_COMPANION_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".webp", ".nfo", ".srt", ".ass", ".ssa", ".sub", ".idx", ".vtt"})
 
 CopyItem = Film | Album | Game | Show
 # Called after each chunk with the number of bytes written. It may raise to stop the copy.
@@ -48,16 +52,31 @@ class CopyPlan:
         return sum(file.size for file in self.files)
 
 
+def _video_name(film: Film) -> str:
+    return f"{film.title} ({film.year})" if film.year else film.title
+
+
+def _free_name(path: Path) -> Path:
+    """`path`, or "<name> (2)", "<name> (3)", ... if something else has that name."""
+    if not path.exists():
+        return path
+    number = 2
+    while path.with_name(f"{path.name} ({number})").exists():
+        number += 1
+    return path.with_name(f"{path.name} ({number})")
+
+
 def copy_destination(item: CopyItem, media_dir: Path) -> Path:
+    """Where the item goes in the box's layout (before a clash with another item is solved)."""
     match item:
         case Film():
-            return media_dir / FILMS_FOLDER / safe_path_component(item.folder.name)
+            return media_dir / VIDEOS_FOLDER / safe_path_component(_video_name(item))
         case Album():
             return media_dir / MUSIC_FOLDER / safe_path_component(item.artist) / safe_path_component(item.title)
         case Game():
             return media_dir / GAMES_FOLDER / item.system / safe_path_component(item.path.name)
         case Show():
-            return media_dir / TV_FOLDER / safe_path_component(item.folder.name)
+            return media_dir / VIDEOS_FOLDER / safe_path_component(item.title)
 
 
 def _visible_files(folder: Path) -> list[Path]:
@@ -68,30 +87,68 @@ def _visible_files(folder: Path) -> list[Path]:
     )
 
 
+def _companions(video: Path) -> list[Path]:
+    """A loose video's own art, details and subtitles: files that start with its name."""
+    return sorted(
+        path for path in video.parent.iterdir()
+        if path.is_file() and path != video and not path.name.startswith(".") and path.stem.startswith(video.stem)
+        and path.suffix.lower() in _COMPANION_EXTENSIONS
+    )
+
+
 def _copy_file(source: Path, target: Path) -> CopyFile:
     return CopyFile(source, target, source.stat().st_size)
 
 
-def plan_copy(item: CopyItem, media_dir: Path, box_episode_fingerprints: frozenset[str] = frozenset()) -> CopyPlan:
-    """A show can already be on the box in part: only its missing episodes and files are copied."""
+def _track_file_name(track_number: int | None, title: str, suffix: str, taken: set[str]) -> str:
+    """"07 Hello Goodbye.mp3"; a second song with the same name gets " (2)"."""
+    stem = safe_path_component(f"{track_number:02d} {title}" if track_number else title)
+    name, number = f"{stem}{suffix}", 2
+    while name.casefold() in taken:
+        name, number = f"{stem} ({number}){suffix}", number + 1
+    taken.add(name.casefold())
+    return name
+
+
+def box_group_folders(library: Library) -> dict[str, Path]:
+    """Each box group video's fingerprint -> its group's folder, to finish a group that is on the box in part."""
+    return {
+        episode.fingerprint: show.folder
+        for show in library.shows if show.source is MediaSource.BOX for episode in show.episodes
+    }
+
+
+def plan_copy(item: CopyItem, media_dir: Path, box_groups: dict[str, Path] | None = None) -> CopyPlan:
+    """A group can already be on the box in part: then only its missing videos go into that
+    box group's folder (`box_groups`, from box_group_folders)."""
+    box_groups = box_groups or {}
     destination = copy_destination(item, media_dir)
     match item:
-        case Film() if item.folder.is_dir():
-            files = [_copy_file(path, destination / path.relative_to(item.folder)) for path in _visible_files(item.folder)]
-            return CopyPlan(destination, files, new_folder=True)
         case Film():
-            return CopyPlan(destination, [_copy_file(item.path, destination)], new_folder=False)
+            destination = _free_name(destination)
+            sources = _visible_files(item.folder) if item.folder.is_dir() else [item.path, *_companions(item.path)]
+            root = item.folder if item.folder.is_dir() else item.path.parent
+            return CopyPlan(destination, [_copy_file(path, destination / path.relative_to(root)) for path in sources], new_folder=True)
         case Album():
-            # Only the album's own files, not other things in the folder.
-            sources = [track.path for track in item.tracks] + ([item.art_path] if item.art_path is not None else [])
-            return CopyPlan(destination, [_copy_file(path, destination / path.name) for path in sources], new_folder=True)
+            destination = _free_name(destination)
+            taken: set[str] = set()
+            files = [
+                _copy_file(track.path, destination / _track_file_name(track.track_number, track.title, track.path.suffix.lower(), taken))
+                for track in item.tracks
+            ]
+            if item.art_path is not None:
+                files.append(_copy_file(item.art_path, destination / f"cover{item.art_path.suffix.lower()}"))
+            return CopyPlan(destination, files, new_folder=True)
         case Game():
             files = [_copy_file(item.path, destination)]
             if item.art_path is not None and not destination.with_suffix(item.art_path.suffix).exists():
                 files.append(_copy_file(item.art_path, destination.with_suffix(item.art_path.suffix)))
             return CopyPlan(destination, files, new_folder=False)
         case Show():
-            on_box = {episode.path for episode in item.episodes if episode.fingerprint in box_episode_fingerprints}
+            existing = next((box_groups[episode.fingerprint] for episode in item.episodes if episode.fingerprint in box_groups), None)
+            # Another group with the same name is not this one.
+            destination = existing if existing is not None else _free_name(destination)
+            on_box = {episode.path for episode in item.episodes if episode.fingerprint in box_groups}
             files = [
                 _copy_file(path, destination / path.relative_to(item.folder))
                 for path in _visible_files(item.folder)
@@ -136,30 +193,32 @@ def run_copy(plan: CopyPlan, count_bytes: ByteCounter | None = None) -> None:
             raise
 
 
-def copy_to_box(item: Film | Album | Game, media_dir: Path) -> Path:
+def copy_to_box(item: CopyItem, media_dir: Path, box_groups: dict[str, Path] | None = None) -> Path:
     if item.source is not MediaSource.USB:
         raise CopyRejected("This item is already on the box")
-    plan = plan_copy(item, media_dir)
-    if plan.destination.exists():
+    plan = plan_copy(item, media_dir, box_groups)
+    if not plan.files or (plan.destination.exists() and not isinstance(item, Show)):
         raise CopyRejected(f"'{plan.destination.name}' is already on the box")
     run_copy(plan)
     return plan.destination
 
 
-def box_id_after_copy(item: Film | Album | Game, destination: Path, media_dir: Path) -> str:
+def box_id_after_copy(item: CopyItem, destination: Path, media_dir: Path) -> str:
     """The id the copied item gets on the box (box ids come from paths)."""
     namer = ItemNamer(media_dir, None)
     match item:
         case Film():
-            video = destination / item.path.name if item.folder.is_dir() else destination
-            return namer.file_id("film", video, item.fingerprint)
+            root = item.folder if item.folder.is_dir() else item.path.parent
+            return namer.file_id("film", destination / item.path.relative_to(root), item.fingerprint)
         case Album():
             return namer.album_id(destination, [])
         case Game():
             return namer.file_id("game", destination, item.fingerprint)
+        case Show():
+            return item_id("show", str(destination.relative_to(media_dir)))
 
 
-def carry_over(item: Film | Album | Game, destination: Path, media_dir: Path, store: Store, metadata: MetadataStore) -> None:
+def carry_over(item: CopyItem, destination: Path, media_dir: Path, store: Store, metadata: MetadataStore) -> None:
     """Box items get path-based ids, so the copy gets the stick item's metadata and hidden state."""
     new_id = box_id_after_copy(item, destination, media_dir)
     record = metadata.get(item.id)

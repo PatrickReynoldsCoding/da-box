@@ -12,6 +12,8 @@ const KEY_SCROLL_STEP := 240
 ## there is nothing further down to focus, and Up scrolls back to the top before the focus
 ## moves up out of it, so a controller can read all of it.
 var key_scroll: ScrollContainer
+## A panel over the screen below (the power menu): the screen below stays visible.
+var overlay := false
 
 
 func _ready() -> void:

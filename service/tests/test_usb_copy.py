@@ -1,3 +1,6 @@
+"""Copy from USB on the box, for drives with any layout (DESIGN_CORRECTIONS_1.md "Upload", and
+DESIGN_CORRECTIONS_2.md part 3: grouped by kind, Copy everything, into the box's own layout)."""
+
 import errno
 import time
 from pathlib import Path
@@ -7,12 +10,14 @@ from fastapi.testclient import TestClient
 
 from dabox import copying, usb_copy
 from dabox.background import BackgroundWorkers
+from dabox.library import item_id
 from dabox.services import Services
 from dabox.usb_copy import stick_items
 from tests.conftest import write_file
 
 
 def make_drive(usb_root: Path) -> Path:
+    """The old layout and loose things mixed, as on real drives."""
     drive = usb_root / "BIGDRIVE"
     write_file(drive / "Films" / "Cars (2006)" / "Cars.mkv", b"cars film bytes")
     write_file(drive / "Films" / "Cars (2006)" / "movie.nfo", b"<movie><title>Cars</title></movie>")
@@ -22,10 +27,16 @@ def make_drive(usb_root: Path) -> Path:
     # One Bluey episode is on the box, one is new.
     write_file(drive / "TV" / "Bluey" / "Season 01" / "Bluey S01E01 - The Pool.mp4", b"episode one")
     write_file(drive / "TV" / "Bluey" / "Season 01" / "Bluey S01E04 - Takeaway.mp4", b"episode four")
-    write_file(drive / "TV" / "Paw Pals" / "Season 01" / "Paw Pals S01E01 - Pilot.mp4", b"paw pilot")
+    write_file(drive / "Video" / "Nature" / "Nature 1 of 2.avi", b"nature one")
+    write_file(drive / "Video" / "Nature" / "Nature 2 of 2.avi", b"nature two")
+    write_file(drive / "Video" / "Lesson.mp4", b"lesson")
+    write_file(drive / "Video" / "Lesson.srt", b"subtitles")
     write_file(drive / "Music" / "Stick Band" / "Stick Album" / "01 Song.mp3", b"stick song")
+    write_file(drive / "Music" / "(16) Nick Lowe - Raining.mp3", b"loose song")
+    write_file(drive / "Music" / "07 - Hello Goodbye.mp3", b"untagged song")
     write_file(drive / "Games" / "nes" / "Rocket.nes", b"nes rom bytes")
     write_file(drive / "Games" / "nes" / "Rocket.png", b"\x89PNG art")
+    write_file(drive / "Mortage calculator ver 2.xlsx", b"not media")
     return drive
 
 
@@ -56,22 +67,40 @@ def tree_items(client: TestClient) -> dict[str, dict]:
     return {item["id"]: item for folder in sticks[0]["folders"] for item in folder["items"]}
 
 
-def test_tree_lists_the_drive_in_four_folders(parent_box: TestClient) -> None:
+def by_title(client: TestClient) -> dict[str, dict]:
+    return {item["title"]: item for item in tree_items(client).values()}
+
+
+def copy_everything(client: TestClient) -> dict:
+    """What the TV's "Copy everything" sends: every item that is not on the box yet."""
+    sticks = client.get("/box/usb/tree").json()
+    item_ids = [item["id"] for folder in sticks[0]["folders"] for item in folder["items"] if not item["on_box"]]
+    started = client.post("/box/usb/copy", json={"stick_id": sticks[0]["stick_id"], "item_ids": item_ids})
+    assert started.status_code == 200, started.text
+    return wait_for_copy(client)
+
+
+def test_tree_groups_the_drive_by_kind(parent_box: TestClient) -> None:
     sticks = parent_box.get("/box/usb/tree").json()
 
     assert [stick["label"] for stick in sticks] == ["BIGDRIVE"]
     folders = {folder["key"]: folder for folder in sticks[0]["folders"]}
-    assert [folder["name"] for folder in sticks[0]["folders"]] == ["Films", "TV", "Music", "Games"]
-    films = {item["title"]: item for item in folders["films"]["items"]}
-    assert films["Frozen"]["on_box"] and films["Frozen"]["bytes"] == 0
-    # The film folder without its hidden files.
-    assert films["Cars"]["bytes"] == len(b"cars film bytes") + len(b"<movie><title>Cars</title></movie>")
-    shows = {item["title"]: item for item in folders["tv"]["items"]}
+    assert [folder["name"] for folder in sticks[0]["folders"]] == ["Videos", "Albums", "Games"]
+    videos = {item["title"]: item for item in folders["videos"]["items"]}
+    assert sorted(videos) == ["Bluey", "Cars", "Frozen", "Lesson", "Nature"]
+    assert videos["Frozen"]["on_box"] and videos["Frozen"]["bytes"] == 0
+    # The video's folder without its hidden files.
+    assert videos["Cars"]["bytes"] == len(b"cars film bytes") + len(b"<movie><title>Cars</title></movie>")
+    # A loose video with its subtitles.
+    assert videos["Lesson"]["bytes"] == len(b"lesson") + len(b"subtitles")
     # Only the new episode counts.
-    assert (shows["Bluey"]["on_box"], shows["Bluey"]["bytes"]) == (False, len(b"episode four"))
-    assert shows["Paw Pals"]["subtitle"] == "1 episode"
+    assert (videos["Bluey"]["on_box"], videos["Bluey"]["bytes"], videos["Bluey"]["subtitle"]) == (False, len(b"episode four"), "2 videos")
+    assert videos["Nature"]["subtitle"] == "2 videos"
+    albums = {(item["subtitle"], item["title"]) for item in folders["music"]["items"]}
+    assert albums == {("Stick Band", "Stick Album"), ("Nick Lowe", "Unknown Album"), ("Unknown Artist", "Unknown Album")}
     assert folders["games"]["items"][0]["subtitle"] == "NES"
-    assert folders["films"]["bytes"] == films["Cars"]["bytes"]
+    # Ids are unique even where two albums share one folder (the loose songs in Music/).
+    assert len(tree_items(parent_box)) == 9
 
 
 def test_copy_from_usb_needs_parent_mode(services: Services, box_client: TestClient, drive: Path) -> None:
@@ -85,15 +114,14 @@ def test_copy_from_usb_needs_parent_mode(services: Services, box_client: TestCli
 def test_space_check_adds_up_the_ticked_items(parent_box: TestClient) -> None:
     items = tree_items(parent_box)
     stick_id = parent_box.get("/box/usb/tree").json()[0]["stick_id"]
-    ticked = list(items)
 
-    check = parent_box.post("/box/usb/check", json={"stick_id": stick_id, "item_ids": ticked}).json()
+    check = parent_box.post("/box/usb/check", json={"stick_id": stick_id, "item_ids": list(items)}).json()
 
     assert check["items"] == len(items) - 1
     assert check["skipped"] == 1
     assert check["bytes_needed"] == sum(item["bytes"] for item in items.values())
     assert check["fits"]
-    assert parent_box.post("/box/usb/check", json={"stick_id": stick_id, "item_ids": ["films:Nope"]}).status_code == 422
+    assert parent_box.post("/box/usb/check", json={"stick_id": stick_id, "item_ids": ["videos:nope"]}).status_code == 422
 
 
 def test_copy_does_not_start_without_space(parent_box: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -108,39 +136,64 @@ def test_copy_does_not_start_without_space(parent_box: TestClient, monkeypatch: 
     assert parent_box.get("/box/usb/copy").json()["state"] == "idle"
 
 
-def test_copy_puts_everything_on_the_box(services: Services, parent_box: TestClient, media_dir: Path) -> None:
-    stick_id = parent_box.get("/box/usb/tree").json()[0]["stick_id"]
-    cars_usb_id = next(film["id"] for film in parent_box.get("/box/films").json() if film["title"] == "Cars")
-    services.store.set_hidden(cars_usb_id, True)
+def test_copy_everything_puts_each_item_in_the_box_layout(services: Services, parent_box: TestClient, media_dir: Path) -> None:
+    lesson_usb_id = next(tile["id"] for tile in parent_box.get("/box/videos").json() if tile["title"] == "Lesson")
+    services.store.set_hidden(lesson_usb_id, True)
 
-    started = parent_box.post("/box/usb/copy", json={"stick_id": stick_id, "item_ids": list(tree_items(parent_box))})
-    assert started.status_code == 200, started.text
-    progress = wait_for_copy(parent_box)
+    progress = copy_everything(parent_box)
 
     assert progress["state"] == "done", progress
-    assert (progress["items_done"], progress["items_total"], progress["skipped"]) == (5, 5, ["Frozen"])
+    assert (progress["items_done"], progress["items_total"]) == (8, 8)
     assert progress["bytes_done"] == progress["bytes_total"] > 0
-    assert progress["message"] == "Copied 5 items from USB. 1 already on the box."
-    assert (media_dir / "Films" / "Cars (2006)" / "Cars.mkv").read_bytes() == b"cars film bytes"
-    assert not (media_dir / "Films" / "Cars (2006)" / "._Cars.mkv").exists()
+    assert progress["message"] == "Copied 8 items from USB."
+    videos = media_dir / "Videos"
+    assert (videos / "Cars (2006)" / "Cars.mkv").read_bytes() == b"cars film bytes"
+    assert (videos / "Cars (2006)" / "movie.nfo").exists()
+    assert not (videos / "Cars (2006)" / "._Cars.mkv").exists()
+    assert (videos / "Lesson" / "Lesson.mp4").exists() and (videos / "Lesson" / "Lesson.srt").exists()
+    assert sorted(path.name for path in (videos / "Nature").iterdir()) == ["Nature 1 of 2.avi", "Nature 2 of 2.avi"]
+    # The group that is on the box in part is finished in its own folder.
     assert (media_dir / "TV" / "Bluey" / "Season 01" / "Bluey S01E04 - Takeaway.mp4").exists()
-    assert (media_dir / "TV" / "Paw Pals" / "Season 01" / "Paw Pals S01E01 - Pilot.mp4").exists()
-    assert (media_dir / "Music" / "Stick Band" / "Stick Album" / "01 Song.mp3").exists()
+    assert not (videos / "Bluey").exists()
+    music = media_dir / "Music"
+    assert (music / "Stick Band" / "Stick Album" / "01 Song.mp3").exists()
+    assert (music / "Nick Lowe" / "Unknown Album" / "16 Raining.mp3").exists()
+    assert (music / "Unknown Artist" / "Unknown Album" / "07 Hello Goodbye.mp3").exists()
     assert (media_dir / "Games" / "nes" / "Rocket.nes").exists() and (media_dir / "Games" / "nes" / "Rocket.png").exists()
+    assert not (media_dir / "Mortage calculator ver 2.xlsx").exists()
     assert not list(media_dir.rglob("*.partial"))
-    # The library was scanned: Cars is a box film now, and stays hidden.
-    cars = [film for film in parent_box.get("/box/films").json() if film["title"] == "Cars"]
-    assert [(film["source"], film["hidden"]) for film in cars] == [("box", True)]
-    assert {show.title: len(show.episodes) for show in services.library.library.shows} == {"Bluey": 4, "Paw Pals": 1}
+
+    # The library was scanned: the copies are box items with the same names, hidden stays hidden.
+    tiles = {tile["title"]: tile for tile in parent_box.get("/box/videos").json()}
+    assert (tiles["Lesson"]["source"], tiles["Lesson"]["hidden"]) == ("box", True)
+    assert (tiles["Nature"]["source"], tiles["Nature"]["kind"]) == ("box", "group")
+    bluey = services.library.find_show(item_id("show", "TV/Bluey"))
+    assert bluey is not None and len(bluey.episodes) == 4
+    albums = {(album.artist, album.title, album.source) for album in services.library.library.albums}
+    assert {("Nick Lowe", "Unknown Album", "box"), ("Unknown Artist", "Unknown Album", "box")} <= albums
     # Copying again finds nothing new.
     assert all(item["on_box"] for item in tree_items(parent_box).values())
+
+
+def test_a_different_item_with_the_same_name_gets_its_own_folder(
+    services: Services, parent_box: TestClient, media_dir: Path,
+) -> None:
+    write_file(media_dir / "Videos" / "Lesson" / "Lesson.mp4", b"a different lesson")
+    services.rescan_library()
+    assert not by_title(parent_box)["Lesson"]["on_box"]
+
+    copy_everything(parent_box)
+
+    assert (media_dir / "Videos" / "Lesson" / "Lesson.mp4").read_bytes() == b"a different lesson"
+    assert (media_dir / "Videos" / "Lesson (2)" / "Lesson.mp4").read_bytes() == b"lesson"
 
 
 def test_pulled_drive_stops_the_copy_and_leaves_no_half_item(
     services: Services, parent_box: TestClient, drive: Path, media_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     stick = services.library.library.sticks[0]
-    items = [item for item in stick_items(stick, services.library.library, media_dir) if item.folder_key in ("films", "music")]
+    items = [item for item in stick_items(stick, services.library.library, media_dir) if item.title in ("Cars", "Stick Album")]
+    items.sort(key=lambda item: item.title)
     real_write = copying._write_file
     calls = []
 
@@ -161,7 +214,7 @@ def test_pulled_drive_stops_the_copy_and_leaves_no_half_item(
 
     assert progress.state == "stopped"
     assert progress.message == "USB removed. Copied 1 of 2. Plug it in again to finish."
-    assert (media_dir / "Films" / "Cars (2006)" / "Cars.mkv").exists()
+    assert (media_dir / "Videos" / "Cars (2006)" / "Cars.mkv").exists()
     assert not (media_dir / "Music" / "Stick Band").exists() or not any((media_dir / "Music" / "Stick Band").iterdir())
     assert not list(media_dir.rglob("*.partial"))
     assert scans == [True]
@@ -181,13 +234,13 @@ def test_stop_ends_the_copy(services: Services, parent_box: TestClient, media_di
 
     progress = services.usb_copier.progress()
     assert (progress.state, progress.message) == ("stopped", "Copy stopped. Copied 0 of 2.")
-    assert not (media_dir / "Films" / "Cars (2006)").exists()
+    assert not (media_dir / "Videos" / "Cars (2006)").exists()
     assert not list(media_dir.rglob("*.partial"))
 
 
 def test_copy_one_game_on_the_box(services: Services, parent_box: TestClient, media_dir: Path) -> None:
     rocket = next(game for game in parent_box.get("/box/games").json() if game["title"] == "Rocket")
-    frozen = next(film for film in parent_box.get("/box/films").json() if film["title"] == "Frozen")
+    frozen = next(tile for tile in parent_box.get("/box/videos").json() if tile["title"] == "Frozen")
 
     assert parent_box.post(f"/box/content/{rocket['id']}/copy-to-box").status_code == 200
     progress = wait_for_copy(parent_box)
@@ -198,6 +251,18 @@ def test_copy_one_game_on_the_box(services: Services, parent_box: TestClient, me
     assert parent_box.post(f"/box/content/{frozen['id']}/copy-to-box").status_code == 409
     services.box_state.set_parent_mode(False)
     assert parent_box.post(f"/box/content/{rocket['id']}/copy-to-box").status_code == 403
+
+
+def test_copy_one_group_on_the_box(services: Services, parent_box: TestClient, media_dir: Path) -> None:
+    nature = next(tile for tile in parent_box.get("/box/videos").json() if tile["title"] == "Nature")
+    services.store.set_hidden(nature["id"], True)
+
+    assert parent_box.post(f"/box/content/{nature['id']}/copy-to-box").status_code == 200
+    assert wait_for_copy(parent_box)["state"] == "done"
+
+    box_nature = next(tile for tile in parent_box.get("/box/videos").json() if tile["title"] == "Nature")
+    assert (box_nature["source"], box_nature["kind"], box_nature["hidden"]) == ("box", "group", True)
+    assert box_nature["id"] == item_id("show", "Videos/Nature")
 
 
 def test_admin_copies_a_game_to_the_box(services: Services, admin_client: TestClient, drive: Path, media_dir: Path) -> None:

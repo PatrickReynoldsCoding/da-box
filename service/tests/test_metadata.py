@@ -27,6 +27,10 @@ COVER_ART = {"images": [{"image": "http://coverartarchive.org/release/x/1.jpg",
 def add_tmdb_responses(fake_http: FakeHttp) -> None:
     fake_http.responses.update({
         "https://api.themoviedb.org/3/search/movie": TMDB_SEARCH,
+        # Saving a key tries it once.
+        "https://api.themoviedb.org/3/configuration": {"images": {}},
+        # Videos are searched as films and as TV series.
+        "https://api.themoviedb.org/3/search/tv": {"results": []},
         "https://api.themoviedb.org/3/movie/1?": TMDB_DETAILS,
         "https://api.themoviedb.org/3/movie/1/images": TMDB_IMAGES,
         "https://image.tmdb.org/t/p/": JPEG_BYTES,
@@ -66,7 +70,7 @@ def test_films_wait_for_a_tmdb_key_then_fetch(services: Services, admin_client: 
     assert fake_http.requested == []
 
     add_tmdb_responses(fake_http)
-    assert admin_client.put("/api/admin/accounts", json={"tmdb_api_key": "k" * 32}).json() == {"tmdb_api_key_set": True}
+    assert admin_client.put("/api/admin/accounts", json={"tmdb_api_key": "k" * 32}).json() == {"tmdb_api_key_set": True, "screenscraper_set": False}
     workers.fetch_metadata_once()
 
     film = next(film for film in admin_client.get("/api/admin/content").json()["films"] if film["id"] == home_id)
@@ -93,7 +97,7 @@ def test_search_pick_and_choose_art(services: Services, admin_client: TestClient
     assert candidates[0]["preview_url"] == "https://image.tmdb.org/t/p/w185/p1.jpg"
 
     applied = admin_client.post(f"/api/admin/content/{item_id}/metadata/apply", json=candidates[0]).json()
-    assert applied["provider_id"] == "1"
+    assert applied["provider_id"] == "movie:1"
 
     options = admin_client.get(f"/api/admin/content/{item_id}/metadata/art-options").json()
     assert [option["full_url"] for option in options] == [

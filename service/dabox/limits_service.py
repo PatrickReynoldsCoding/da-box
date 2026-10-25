@@ -157,6 +157,13 @@ class LimitsService:
 
     # ---- The enforcer tick (every couple of seconds) ----
 
+    def power_off_now(self) -> None:
+        """The TV's power menu: stop what plays (a game saves first), then turn the box off."""
+        with self._lock:
+            self._agent.stop()
+            self._shutdown_at = None
+            self._power.power_off()
+
     def tick(self) -> None:
         with self._lock:
             now = self._clock()

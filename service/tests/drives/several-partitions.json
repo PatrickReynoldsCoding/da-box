@@ -1,0 +1,120 @@
+{
+  "description": "A USB disk with an EFI partition, swap, and an NTFS data partition. Swap is not media and not unsupported.",
+  "source": "typical",
+  "lsblk": {
+    "blockdevices": [
+      {
+        "path": "/dev/sdb",
+        "fstype": null,
+        "label": null,
+        "uuid": null,
+        "mountpoint": null,
+        "tran": "usb",
+        "pkname": null
+      },
+      {
+        "path": "/dev/sdb1",
+        "fstype": "vfat",
+        "label": "EFI",
+        "uuid": "EF-01",
+        "mountpoint": null,
+        "tran": null,
+        "pkname": "sdb"
+      },
+      {
+        "path": "/dev/sdb2",
+        "fstype": "swap",
+        "label": null,
+        "uuid": "sw-uuid",
+        "mountpoint": null,
+        "tran": null,
+        "pkname": "sdb"
+      },
+      {
+        "path": "/dev/sdb3",
+        "fstype": "ntfs",
+        "label": "DATA",
+        "uuid": "DA-7A",
+        "mountpoint": null,
+        "tran": null,
+        "pkname": "sdb"
+      },
+      {
+        "path": "/dev/nvme0n1",
+        "fstype": null,
+        "label": null,
+        "uuid": null,
+        "mountpoint": null,
+        "tran": "nvme",
+        "pkname": null
+      },
+      {
+        "path": "/dev/nvme0n1p1",
+        "fstype": "vfat",
+        "label": null,
+        "uuid": "9678-AB76",
+        "mountpoint": "/boot/efi",
+        "tran": "nvme",
+        "pkname": "nvme0n1"
+      },
+      {
+        "path": "/dev/nvme0n1p2",
+        "fstype": "ext4",
+        "label": null,
+        "uuid": "root-uuid",
+        "mountpoint": "/",
+        "tran": "nvme",
+        "pkname": "nvme0n1"
+      }
+    ]
+  },
+  "udev": {
+    "/dev/sdb1": {
+      "DEVTYPE": "partition",
+      "ID_BUS": "usb",
+      "ID_PATH": "pci-0000:00:14.0-usb-0:2:1.0-scsi-0:0:0:0",
+      "ID_FS_TYPE": "vfat",
+      "ID_FS_USAGE": "filesystem",
+      "ID_USB_DRIVER": "usb-storage"
+    },
+    "/dev/sdb2": {
+      "DEVTYPE": "partition",
+      "ID_BUS": "usb",
+      "ID_PATH": "pci-0000:00:14.0-usb-0:2:1.0-scsi-0:0:0:0",
+      "ID_FS_TYPE": "swap",
+      "ID_FS_USAGE": "other",
+      "ID_USB_DRIVER": "usb-storage"
+    },
+    "/dev/sdb3": {
+      "DEVTYPE": "partition",
+      "ID_BUS": "usb",
+      "ID_PATH": "pci-0000:00:14.0-usb-0:2:1.0-scsi-0:0:0:0",
+      "ID_FS_TYPE": "ntfs",
+      "ID_FS_USAGE": "filesystem",
+      "ID_USB_DRIVER": "usb-storage"
+    },
+    "/dev/nvme0n1p1": {
+      "DEVTYPE": "partition",
+      "ID_PATH": "pci-0000:00:1d.0-nvme-1",
+      "ID_FS_TYPE": "vfat",
+      "ID_FS_USAGE": "filesystem"
+    },
+    "/dev/nvme0n1p2": {
+      "DEVTYPE": "partition",
+      "ID_PATH": "pci-0000:00:1d.0-nvme-1",
+      "ID_FS_TYPE": "ext4",
+      "ID_FS_USAGE": "filesystem"
+    }
+  },
+  "expect": {
+    "usb_filesystems": [
+      "/dev/sdb1",
+      "/dev/sdb3"
+    ],
+    "unsupported": [],
+    "shared": [
+      "/dev/sdb1",
+      "/dev/sdb3"
+    ]
+  }
+}

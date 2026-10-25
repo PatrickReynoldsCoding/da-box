@@ -1,19 +1,25 @@
-class_name UsbItemScreen
+class_name ItemActionsScreen
 extends Screen
-## Parent mode, a film or game on a USB stick: play it, or copy it to the box.
+## Parent mode, one video or game: play it; copy it to the box if it is on a USB stick; and
+## for a video, fix its posters and info (DESIGN_CORRECTIONS_2.md, 4.1).
 
 var play_button: Button
 var copy_button: Button
+var posters_button: Button
 var _title: String
 var _item_id: String
 var _play: Callable
+var _on_usb: bool
+var _can_match: bool
 var _message: Label
 
 
-func _init(title: String, item_id: String, play: Callable) -> void:
+func _init(title: String, item_id: String, play: Callable, on_usb: bool = true, can_match: bool = false) -> void:
 	_title = title
 	_item_id = item_id
 	_play = play
+	_on_usb = on_usb
+	_can_match = can_match
 
 
 func _ready() -> void:
@@ -24,7 +30,9 @@ func _ready() -> void:
 	var title := UiTheme.title_label(_title)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(title)
-	var hint := UiTheme.muted_label("This is on a USB stick. Copy it to keep it on the box after the stick comes out.", UiTheme.FONT_SIZE)
+	var hint := UiTheme.muted_label(
+		"This is on a USB stick. Copy it to keep it on the box after the stick comes out." if _on_usb else "Parent mode.",
+		UiTheme.FONT_SIZE)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(hint)
 	var buttons := HBoxContainer.new()
@@ -33,7 +41,11 @@ func _ready() -> void:
 	play_button = _big_button("Play", _on_play)
 	buttons.add_child(play_button)
 	copy_button = _big_button("Copy to the box", _on_copy)
+	copy_button.visible = _on_usb
 	buttons.add_child(copy_button)
+	posters_button = _big_button("Posters and info", func() -> void: open_screen.emit(MatchScreen.new(_item_id, _title)))
+	posters_button.visible = _can_match
+	buttons.add_child(posters_button)
 	column.add_child(buttons)
 	_message = UiTheme.muted_label("", UiTheme.FONT_SIZE)
 	_message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

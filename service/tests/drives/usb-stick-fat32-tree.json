@@ -1,0 +1,74 @@
+{
+  "description": "A FAT32 USB stick on Debian 13, where lsblk prints a tree (partitions as children) and children have no TRAN.",
+  "source": "typical: lsblk tree shape as on the Debian VM.",
+  "lsblk": {
+    "blockdevices": [
+      {
+        "path": "/dev/vda",
+        "fstype": null,
+        "label": null,
+        "uuid": null,
+        "mountpoint": null,
+        "tran": null,
+        "pkname": null,
+        "children": [
+          {
+            "path": "/dev/vda1",
+            "fstype": "ext4",
+            "label": null,
+            "uuid": "root",
+            "mountpoint": "/",
+            "tran": null,
+            "pkname": null
+          }
+        ]
+      },
+      {
+        "path": "/dev/sda",
+        "fstype": null,
+        "label": null,
+        "uuid": null,
+        "mountpoint": null,
+        "tran": "usb",
+        "pkname": null,
+        "children": [
+          {
+            "path": "/dev/sda1",
+            "fstype": "vfat",
+            "label": "KIDS",
+            "uuid": "AB-12",
+            "mountpoint": null,
+            "tran": null,
+            "pkname": null
+          }
+        ]
+      }
+    ]
+  },
+  "udev": {
+    "/dev/sda1": {
+      "DEVTYPE": "partition",
+      "ID_BUS": "usb",
+      "ID_PATH": "pci-0000:00:14.0-usb-0:2:1.0-scsi-0:0:0:0",
+      "ID_FS_TYPE": "vfat",
+      "ID_FS_USAGE": "filesystem",
+      "ID_USB_DRIVER": "usb-storage",
+      "ID_FS_LABEL": "KIDS"
+    },
+    "/dev/vda1": {
+      "DEVTYPE": "partition",
+      "ID_PATH": "pci-0000:00:04.0",
+      "ID_FS_TYPE": "ext4",
+      "ID_FS_USAGE": "filesystem"
+    }
+  },
+  "expect": {
+    "usb_filesystems": [
+      "/dev/sda1"
+    ],
+    "unsupported": [],
+    "shared": [
+      "/dev/sda1"
+    ]
+  }
+}

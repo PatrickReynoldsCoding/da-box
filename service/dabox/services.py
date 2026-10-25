@@ -13,7 +13,7 @@ from dabox.library import LibraryIndex
 from dabox.limits_service import LimitsService
 from dabox.maintenance import Remover, Updater
 from dabox.metadata import MetadataService
-from dabox.models import Album, Film, Game
+from dabox.models import Album, Film, Game, Show
 from dabox.playlists import Playlists
 from dabox.software_update import SoftwareUpdates
 from dabox.store import Store
@@ -54,7 +54,7 @@ class Services:
         self.metadata_wanted.set()
         self.guide_wanted.set()
 
-    def item_or_404(self, item_id: str) -> Film | Album | Game:
+    def item_or_404(self, item_id: str) -> Film | Show | Album | Game:
         item = self.library.find(item_id)
         if item is None:
             raise HTTPException(status_code=404, detail="No such item")

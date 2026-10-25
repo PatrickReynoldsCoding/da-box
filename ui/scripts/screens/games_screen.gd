@@ -53,7 +53,7 @@ func _load() -> void:
 ## In parent mode a USB game can also be copied to the box. Its saves stay (they follow the file's content).
 func _pick(game: Dictionary) -> void:
 	if Api.parent_mode() and game.get("source") == "usb":
-		open_screen.emit(UsbItemScreen.new(game["title"], game["id"], _play.bind(game)))
+		open_screen.emit(ItemActionsScreen.new(game["title"], game["id"], _play.bind(game)))
 	else:
 		_play(game)
 

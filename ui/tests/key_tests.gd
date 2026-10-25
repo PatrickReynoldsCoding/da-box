@@ -23,11 +23,17 @@ func _run() -> void:
 	await _test_setup_jumps_to_next()
 	await _test_setup_down_goes_to_back()
 	await _test_copy_tick_list()
+	await _test_copy_everything_and_drive_check()
 	await _test_music_menu()
 	await _test_music_screens_open()
 	await _test_controller_buttons()
 	await _test_home_settings_button()
 	await _test_settings_update_asks_first()
+	await _test_videos_tiles()
+	await _test_group_screen()
+	await _test_posters_settings()
+	await _test_match_screen()
+	await _test_power_menu()
 	print("Key tests: %d checks, %d failed" % [_checks, _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
 
@@ -211,7 +217,7 @@ func _test_music_screens_open() -> void:
 	_check(progress._back_button.text == "Done" and progress._status.text.begins_with("USB removed"), "progress: the end message")
 	await _close(progress)
 
-	var usb_item := UsbItemScreen.new("Cars", "u1", func() -> void: pass)
+	var usb_item := ItemActionsScreen.new("Cars", "u1", func() -> void: pass)
 	await _show(usb_item)
 	_check(_focus() == usb_item.play_button, "USB item: starts on Play")
 	await _press("ui_right")
@@ -260,6 +266,43 @@ func _test_controller_buttons() -> void:
 	await _frames()
 
 
+func _test_copy_everything_and_drive_check() -> void:
+	var screen := CopyUsbScreen.new()
+	await _show(screen)
+	screen.show_drive_checks([
+		{"drive": {"id": "s1", "label": "Untitled", "mounted": true, "problem": null}, "games_without_core": 1, "hidden": 2,
+		 "report": {"videos": 4, "groups": 3, "albums": 3, "songs": 351, "games": 1, "other_files": {".xlsx": 1, ".pdf": 2},
+			"skipped_folders": 2, "unreadable": []}},
+		{"drive": {"id": "s2", "label": "Mac HD", "mounted": false, "problem": "The box cannot read hfsplus drives. Use FAT32, exFAT, NTFS or ext4."},
+		 "games_without_core": 0, "hidden": 0, "report": null},
+	])
+	_check(screen._check.text == "Mac HD: The box cannot read hfsplus drives. Use FAT32, exFAT, NTFS or ext4.", "drive check: a drive the box cannot read says why")
+	screen.show_sticks([{
+		"stick_id": "s1", "label": "Untitled", "folders": [
+			{"key": "videos", "name": "Videos", "bytes": 300, "items": [
+				{"id": "videos:a", "title": "Nature", "subtitle": "2 videos", "bytes": 200, "on_box": false},
+				{"id": "videos:b", "title": "Frozen", "subtitle": null, "bytes": 0, "on_box": true},
+				{"id": "videos:c", "title": "Lesson", "subtitle": null, "bytes": 100, "on_box": false},
+			]},
+			{"key": "music", "name": "Albums", "bytes": 50, "items": [
+				{"id": "music:d", "title": "Unknown Album", "subtitle": "Nick Lowe", "bytes": 50, "on_box": false},
+			]},
+		],
+	}])
+	await _frames()
+	_check(screen._check.text.ends_with("Found 4 videos, 3 groups, 3 albums (351 songs), 1 game.  Skipped: 3 other files, 1 game with no emulator, 2 hidden."),
+		"drive check: found and skipped for the drive (got %s)" % screen._check.text)
+	_check(not screen.copy_all_button.disabled, "copy everything: on when there is something new")
+	screen.copy_everything()
+	_check(screen.ticked_ids() == ["videos:a", "videos:c", "music:d"], "copy everything: ticks every item that is not on the box")
+	await _frames()
+
+	screen.show_sticks([{"stick_id": "s3", "label": "Empty", "folders": []}])
+	await _frames()
+	_check(screen.copy_all_button.disabled, "copy everything: off when there is nothing new")
+	await _close(screen)
+
+
 # ---- Settings (DESIGN_CORRECTIONS_2.md, part 7) ----
 
 func _test_home_settings_button() -> void:
@@ -294,20 +337,180 @@ func _test_settings_update_asks_first() -> void:
 	await _frames()
 	_check(not settings._confirm_row.visible and _focus() == settings._update_button, "settings: Back on the question means No")
 
-	# Below Update there is only text: Down scrolls to it, Up scrolls back.
+	# Down goes through the buttons, then scrolls the text below the last one (About); Up goes back.
 	var scroll := settings.key_scroll
 	scroll.scroll_vertical = 0
 	await _frames()
 	var bar := scroll.get_v_scroll_bar()
 	_check(bar.max_value > bar.page, "settings: the screen is taller than the TV (the test needs a scroll)")
-	for i in 10:
+	for i in 16:
 		await _press("ui_down")
 	_check(scroll.scroll_vertical >= int(bar.max_value - bar.page), "settings: Down scrolls to the bottom")
-	_check(_focus() == settings._update_button, "settings: scrolling keeps the focus on Update")
-	for i in 10:
+	_check(_focus() == settings._lookup_button, "settings: the last button is Look up now")
+	for i in 16:
 		await _press("ui_up")
 	_check(scroll.scroll_vertical == 0, "settings: Up scrolls back to the top")
 	await _close(settings)
+
+
+# ---- Videos and groups (DESIGN_CORRECTIONS_2.md, part 2) ----
+
+func _test_videos_tiles() -> void:
+	var videos := VideosScreen.new()
+	await _show(videos)
+	var group_tile := videos._tile({"kind": "group", "id": "g1", "title": "Bluey", "art_url": null, "video_count": 3, "source": "box", "hidden": false})
+	var video_tile := videos._tile({"kind": "video", "id": "v1", "title": "Frozen", "year": 2013, "art_url": null, "seconds": 60.0, "path": "/x.mkv", "source": "usb", "hidden": false})
+	videos._grid.add_child(group_tile)
+	videos._grid.add_child(video_tile)
+	var opened: Array = []
+	videos.open_screen.connect(func(screen: Screen) -> void: opened.append(screen))
+	group_tile.grab_focus()
+	await _press("ui_accept")
+	_check(opened.size() == 1 and opened[0] is GroupScreen and opened[0]._group_id == "g1", "videos: a group tile opens the group")
+	for screen in opened:
+		screen.free()
+	await _close(videos)
+
+
+static func _sample_group(resume: int) -> Dictionary:
+	return {
+		"id": "g1", "title": "Fargo (2014) Season 5", "art_url": null, "hidden": false, "source": "usb", "stick_label": "Untitled",
+		"resume_index": resume,
+		"videos": [
+			{"id": "e1", "title": "The Tragedy of the Commons", "path": "/1.mkv", "seconds": 60.0, "section": "", "code": "S5 E1"},
+			{"id": "e2", "title": "Trials and Tribulations", "path": "/2.mkv", "seconds": 60.0, "section": "", "code": "S5 E2"},
+			{"id": "e3", "title": "Making of", "path": "/3.mkv", "seconds": null, "section": "Extras", "code": null},
+		],
+	}
+
+
+func _test_group_screen() -> void:
+	var group := GroupScreen.new("g1")
+	await _show(group)
+	group.show_group(_sample_group(0))
+	await _frames()
+	_check(_focus() == group._play_button and group._play_button.text == "Play", "group: starts on Play")
+	var rows: Array[String] = []
+	for child in group._videos.get_children():
+		rows.append(child.text)
+	_check(rows == ["Play", "S5 E1  ·  The Tragedy of the Commons", "S5 E2  ·  Trials and Tribulations", "Extras", "Making of"],
+		"group: videos in order, with the section heading (got %s)" % [rows])
+	await _press("ui_down")
+	_check(_focus() is Button and _focus().get_meta("video_index", -1) == 0, "group: Down goes to the first video")
+
+	group.show_group(_sample_group(1))
+	await _frames()
+	_check(group._play_button.text == "Play: S5 E2  ·  Trials and Tribulations", "group: Play names the video it resumes at")
+	_check((group._videos.get_child(1) as Button).text == "Play from the start", "group: Play from the start is there after a resume")
+
+	# A video that played to its end moves the resume point on; a stopped one does not.
+	group._on_video_end(false, 1)
+	_check(group._group["resume_index"] == 1, "group: a stopped video does not move on")
+	group._on_video_end(true, 2)
+	await _frames()
+	_check(group._group["resume_index"] == 0, "group: after the last video, Play starts from the beginning again")
+	await _close(group)
+
+
+# ---- Posters and info (DESIGN_CORRECTIONS_2.md, part 4) ----
+
+func _test_posters_settings() -> void:
+	var settings := SettingsScreen.new()
+	await _show(settings)
+	settings.show_posters({
+		"accounts": [
+			{"key": "tmdb", "name": "TMDB", "used_for": "Posters and details for videos and groups", "state": "not_working", "reason": "The key or password is wrong."},
+			{"key": "musicbrainz", "name": "MusicBrainz", "used_for": "Album covers", "state": "not_needed", "reason": null},
+		],
+		"done": 3, "waiting": 0, "not_found": 2, "failed": 1, "no_account": 4, "last_error": "Home Movie: No internet, or the site cannot be reached.",
+	})
+	await _frames()
+	var rows: Array[String] = []
+	for child in settings._accounts.get_children():
+		rows.append(child.text)
+	_check(rows == ["TMDB  ·  Posters and details for videos and groups  ·  Not working: The key or password is wrong.",
+		"MusicBrainz  ·  Album covers  ·  No key needed"], "posters: each source and its state (got %s)" % [rows])
+	_check(settings._posters_status.text == "3 have posters and info, 4 wait for a TMDB key, 2 not found, 1 failed.\nLast problem: Home Movie: No internet, or the site cannot be reached.",
+		"posters: the counts and the last problem (got %s)" % settings._posters_status.text)
+	settings._lookup_button.grab_focus()
+	await _press("ui_accept")
+	_check(settings._lookup_confirm.visible and _focus() == settings._lookup_no, "posters: Look up now asks first, with No focused")
+	settings.go_back()
+	await _frames()
+	_check(not settings._lookup_confirm.visible and _focus() == settings._lookup_button, "posters: Back on the question means No")
+
+	var opened: Array = []
+	settings.open_screen.connect(func(screen: Screen) -> void: opened.append(screen))
+	settings._enter_screenscraper()
+	_check(opened.size() == 1 and opened[0] is TextEntryScreen and opened[0]._title == "ScreenScraper user name", "posters: ScreenScraper asks for the user name first")
+	opened[0].entered.emit("me")
+	await _frames()
+	_check(opened.size() == 2 and opened[1]._title == "ScreenScraper password" and opened[1]._secret, "posters: then the password, hidden")
+	for screen in opened:
+		screen.free()
+	await _close(settings)
+
+
+func _test_match_screen() -> void:
+	var screen := MatchScreen.new("g1", "Fargo (2014) Season 5")
+	await _show(screen)
+	screen.show_results([
+		{"provider": "tmdb", "provider_id": "tv:9", "title": "Fargo", "year": 2014, "artist": null, "description": "TV series. A crime story.", "preview_url": null},
+		{"provider": "tmdb", "provider_id": "movie:2", "title": "Fargo", "year": 1996, "artist": null, "description": null, "preview_url": null},
+	])
+	await _frames()
+	_check(_focus() == screen._results.get_child(0), "match: starts on the first result")
+	_check((screen._results.get_child(0) as Button).text == "Fargo (2014)   —   TV series. A crime story.", "match: a result shows its title, year and details")
+	await _press("ui_up")
+	_check(_focus() == screen._search_button, "match: Up goes to the search, to change it")
+	screen.show_results([])
+	await _frames()
+	_check(screen._message.text == "Nothing found. Change the search." and _focus() == screen._search_button, "match: nothing found goes to the search")
+	await _close(screen)
+
+
+# ---- Power menu (DESIGN_CORRECTIONS_2.md, part 9) ----
+
+func _test_power_menu() -> void:
+	var home := HomeScreen.new()
+	await _show(home)
+	var opened: Array = []
+	home.open_screen.connect(func(screen: Screen) -> void: opened.append(screen))
+	home.go_back()
+	_check(opened.size() == 1 and opened[0] is PowerMenuScreen and opened[0].overlay, "power: Back on Home opens the power menu over Home")
+	for screen in opened:
+		screen.free()
+	await _close(home)
+
+	var main_script: GDScript = preload("res://scripts/main.gd")
+	_check(main_script.is_guide_button(_joy_event(JOY_BUTTON_GUIDE, 0)), "power: the Guide button is recognised")
+	_check(not main_script.is_guide_button(_joy_event(JOY_BUTTON_A, 0)), "power: A is not the Guide button")
+	var main: Node = main_script.new()
+	for case in [[VideosScreen.new(), true], [VideoScreen.new("x"), false], [GameScreen.new("x"), false], [PowerMenuScreen.new(), false]]:
+		var stack: Array[Screen] = [case[0]]
+		main._stack = stack
+		_check(main.can_open_power_menu() == case[1], "power: Guide over %s %s" % [case[0].get_script().get_global_name(), "opens" if case[1] else "does nothing"])
+		case[0].free()
+	main.free()
+
+	var menu := PowerMenuScreen.new()
+	await _show(menu)
+	_check(_focus() == menu.cancel_button, "power: Cancel has the focus first")
+	for action in ["ui_up", "ui_down", "ui_left"]:
+		await _press(action)
+		_check(_focus() == menu.cancel_button, "power: %s stays on Cancel, in the panel" % action)
+	await _press("ui_right")
+	_check(_focus() == menu.shut_down_button, "power: Right goes to Shut down")
+	await _press("ui_down")
+	_check(_focus() == menu.shut_down_button, "power: Down stays in the panel")
+	var closed := [false]
+	menu.close_screen.connect(func() -> void: closed[0] = true)
+	menu.go_back()
+	_check(closed[0], "power: Back means Cancel")
+	# Offline (no service): the box says it could not turn off and gives the buttons back.
+	await menu._shut_down()
+	_check(not menu.cancel_button.disabled and menu._message.text == "The box could not turn off.", "power: a failed shut down says so")
+	await _close(menu)
 
 
 func _joy_event(button: JoyButton, device: int, pressed: bool = true) -> InputEventJoypadButton:

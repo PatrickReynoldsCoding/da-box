@@ -1,0 +1,268 @@
+{
+  "description": "Ubuntu laptop with an empty USB card reader (no card in it) and 22 snap loop devices (squashfs). Nothing must be found.",
+  "source": "real: lsblk and the card reader's udev properties recorded on the Yoga PC, 2026-10-24.",
+  "lsblk": {
+    "blockdevices": [
+      {
+        "path": "/dev/loop0",
+        "fstype": "squashfs",
+        "label": null,
+        "uuid": null,
+        "mountpoint": "/snap/bare/5",
+        "tran": null,
+        "pkname": null
+      },
+      {
+        "path": "/dev/loop1",
+        "fstype": "squashfs",
+        "label": null,
+        "uuid": null,
+        "mountpoint": "/snap/code/273",
+        "tran": null,
+        "pkname": null
+      },
+      {
+        "path": "/dev/loop2",
+        "fstype": "squashfs",
+        "label": null,
+        "uuid": null,
+        "mountpoint": "/snap/core18/3084",
+        "tran": null,
+        "pkname": null
+      },
+      {
+        "path": "/dev/loop3",
+        "fstype": "squashfs",
+        "label": null,
+        "uuid": null,
+        "mountpoint": "/snap/core20/2922",
+        "tran": null,
+        "pkname": null
+      },
+      {
+        "path": "/dev/loop4",
+        "fstype": "squashfs",
+        "label": null,
+        "uuid": null,
+        "mountpoint": "/snap/core22/2987",
+        "tran": null,
+        "pkname": null
+      },
+      {
+        "path": "/dev/loop5",
+        "fstype": "squashfs",
+        "label": null,
+        "uuid": null,
+        "mountpoint": "/snap/core24/1643",
+        "tran": null,
+        "pkname": null
+      },
+      {
+        "path": "/dev/loop6",
+        "fstype": "squashfs",
+        "label": null,
+        "uuid": null,
+        "mountpoint": "/snap/desktop-security-center/151",
+        "tran": null,
+        "pkname": null
+      },
+      {
+        "path": "/dev/loop7",
+        "fstype": "squashfs",
+        "label": null,
+        "uuid": null,
+        "mountpoint": "/snap/desktop-security-center/206",
+        "tran": null,
+        "pkname": null
+      },
+      {
+        "path": "/dev/loop8",
+        "fstype": "squashfs",
+        "label": null,
+        "uuid": null,
+        "mountpoint": "/snap/firefox/8763",
+        "tran": null,
+        "pkname": null
+      },
+      {
+        "path": "/dev/loop9",
+        "fstype": "squashfs",
+        "label": null,
+        "uuid": null,
+        "mountpoint": "/snap/firmware-updater/226",
+        "tran": null,
+        "pkname": null
+      },
+      {
+        "path": "/dev/loop10",
+        "fstype": "squashfs",
+        "label": null,
+        "uuid": null,
+        "mountpoint": "/snap/gnome-46-2404/164",
+        "tran": null,
+        "pkname": null
+      },
+      {
+        "path": "/dev/loop11",
+        "fstype": "squashfs",
+        "label": null,
+        "uuid": null,
+        "mountpoint": "/snap/gtk-common-themes/1535",
+        "tran": null,
+        "pkname": null
+      },
+      {
+        "path": "/dev/loop12",
+        "fstype": "squashfs",
+        "label": null,
+        "uuid": null,
+        "mountpoint": "/snap/hwctl/131",
+        "tran": null,
+        "pkname": null
+      },
+      {
+        "path": "/dev/loop13",
+        "fstype": "squashfs",
+        "label": null,
+        "uuid": null,
+        "mountpoint": "/snap/hwctl/123",
+        "tran": null,
+        "pkname": null
+      },
+      {
+        "path": "/dev/loop14",
+        "fstype": "squashfs",
+        "label": null,
+        "uuid": null,
+        "mountpoint": "/snap/intellij-idea-community/826",
+        "tran": null,
+        "pkname": null
+      },
+      {
+        "path": "/dev/loop15",
+        "fstype": "squashfs",
+        "label": null,
+        "uuid": null,
+        "mountpoint": "/snap/mesa-2404/1839",
+        "tran": null,
+        "pkname": null
+      },
+      {
+        "path": "/dev/loop16",
+        "fstype": "squashfs",
+        "label": null,
+        "uuid": null,
+        "mountpoint": "/snap/postman/360",
+        "tran": null,
+        "pkname": null
+      },
+      {
+        "path": "/dev/loop17",
+        "fstype": "squashfs",
+        "label": null,
+        "uuid": null,
+        "mountpoint": "/snap/prompting-client/222",
+        "tran": null,
+        "pkname": null
+      },
+      {
+        "path": "/dev/loop18",
+        "fstype": "squashfs",
+        "label": null,
+        "uuid": null,
+        "mountpoint": "/snap/prompting-client/228",
+        "tran": null,
+        "pkname": null
+      },
+      {
+        "path": "/dev/loop19",
+        "fstype": "squashfs",
+        "label": null,
+        "uuid": null,
+        "mountpoint": "/snap/snap-store/1390",
+        "tran": null,
+        "pkname": null
+      },
+      {
+        "path": "/dev/loop20",
+        "fstype": "squashfs",
+        "label": null,
+        "uuid": null,
+        "mountpoint": "/snap/snapd/27710",
+        "tran": null,
+        "pkname": null
+      },
+      {
+        "path": "/dev/loop21",
+        "fstype": "squashfs",
+        "label": null,
+        "uuid": null,
+        "mountpoint": "/snap/snapd-desktop-integration/391",
+        "tran": null,
+        "pkname": null
+      },
+      {
+        "path": "/dev/sda",
+        "fstype": null,
+        "label": null,
+        "uuid": null,
+        "mountpoint": null,
+        "tran": "usb",
+        "pkname": null
+      },
+      {
+        "path": "/dev/nvme0n1",
+        "fstype": null,
+        "label": null,
+        "uuid": null,
+        "mountpoint": null,
+        "tran": "nvme",
+        "pkname": null
+      },
+      {
+        "path": "/dev/nvme0n1p1",
+        "fstype": "vfat",
+        "label": null,
+        "uuid": "0A37-9F33",
+        "mountpoint": "/boot/efi",
+        "tran": "nvme",
+        "pkname": "nvme0n1"
+      },
+      {
+        "path": "/dev/nvme0n1p2",
+        "fstype": "ext4",
+        "label": null,
+        "uuid": "307f07dc-f8ff-4fe2-b726-373c8e2a31d2",
+        "mountpoint": "/",
+        "tran": "nvme",
+        "pkname": "nvme0n1"
+      }
+    ]
+  },
+  "udev": {
+    "/dev/sda": {
+      "DEVTYPE": "disk",
+      "ID_BUS": "usb",
+      "ID_TYPE": "disk",
+      "ID_USB_DRIVER": "usb-storage",
+      "ID_PATH": "pci-0000:34:00.4-usb-0:1.2:1.0-scsi-0:0:0:0"
+    },
+    "/dev/nvme0n1p1": {
+      "DEVTYPE": "partition",
+      "ID_PATH": "pci-0000:00:1d.0-nvme-1",
+      "ID_FS_TYPE": "vfat",
+      "ID_FS_USAGE": "filesystem"
+    },
+    "/dev/nvme0n1p2": {
+      "DEVTYPE": "partition",
+      "ID_PATH": "pci-0000:00:1d.0-nvme-1",
+      "ID_FS_TYPE": "ext4",
+      "ID_FS_USAGE": "filesystem"
+    }
+  },
+  "expect": {
+    "usb_filesystems": [],
+    "unsupported": [],
+    "shared": []
+  }
+}

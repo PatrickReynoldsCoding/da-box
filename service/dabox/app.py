@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from dabox import admin_api, box_api, guide_api, limits_api, maintenance_api, music_api, software_api, usb_copy_api
+from dabox import admin_api, box_api, drive_check, guide_api, posters_api, limits_api, maintenance_api, music_api, software_api, usb_copy_api
 from dabox.activity import ActivityLog
 from dabox.auth import AdminAuth
 from dabox.background import BackgroundWorkers
@@ -116,6 +116,11 @@ def create_app(services: Services, run_workers: bool = True) -> FastAPI:
     app.include_router(usb_copy_api.box_router)
     app.include_router(usb_copy_api.parent_router)
     app.include_router(software_api.admin_router)
+    app.include_router(drive_check.box_router)
+    app.include_router(drive_check.admin_router)
+    app.include_router(posters_api.box_router)
+    app.include_router(posters_api.parent_router)
+    app.include_router(posters_api.admin_router)
     app.include_router(software_api.box_router)
     app.mount("/", StaticFiles(directory=ADMIN_WEB_DIR, html=True), name="admin-web")
     return app

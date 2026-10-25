@@ -69,6 +69,8 @@ class MediaSource(StrEnum):
 
 
 class Film(BaseModel):
+    """A single video: a folder with one video in it, or a loose video (DESIGN_CORRECTIONS_2.md, 2.1)."""
+
     id: str
     title: str
     year: int | None
@@ -104,22 +106,31 @@ class Album(BaseModel):
 
 
 class Episode(BaseModel):
+    """One video in a group."""
+
     id: str
     title: str
+    # From an "S01E02" marker. Season 0: the group's videos have no markers.
     season: int
+    # The episode number, or the video's place in the group (1, 2, ...) without markers.
     number: int
     path: Path
     fingerprint: str
+    # The sub-folder inside the group ("Season 1"), or "" for the group's own folder.
+    section: str = ""
 
 
 class Show(BaseModel):
-    """A TV show on the box. Shows are used in channels only."""
+    """A group: a folder with several videos, played in order (DESIGN_CORRECTIONS_2.md, 2.1).
+    The name "Show" stays so the ids of TV shows on the box stay the same."""
 
     id: str
     title: str
     folder: Path
     art_path: Path | None
     episodes: list[Episode]
+    source: MediaSource = MediaSource.BOX
+    stick_label: str | None = None
 
 
 class Game(BaseModel):
@@ -135,9 +146,27 @@ class Game(BaseModel):
     stick_label: str | None
 
 
+class ScanReport(BaseModel):
+    """What a scan of one drive (or the box) found and skipped, for the USB drive check."""
+
+    videos: int = 0
+    groups: int = 0
+    albums: int = 0
+    songs: int = 0
+    games: int = 0
+    # Files that are not media, by extension (".xlsx": 1).
+    other_files: dict[str, int] = {}
+    # System and junk folders that were not read ($RECYCLE.BIN, System Volume Information, ...).
+    skipped_folders: int = 0
+    # Files the box could not read, with the reason (the first few).
+    unreadable: list[str] = []
+
+
 class Library(BaseModel):
     films: list[Film]
     albums: list[Album]
     shows: list[Show]
     games: list[Game]
     sticks: list[UsbStick]
+    # One report for each stick, by the stick's id.
+    reports: dict[str, ScanReport] = {}

@@ -15,15 +15,24 @@ from dabox.views import (
     AlbumDetailView,
     AlbumView,
     FilmView,
+    GroupDetailView,
+    VideoTileView,
     admin_urls,
     album_detail_view,
     album_view,
     film_view,
+    group_detail_view,
+    group_tile,
+    video_tile,
     visible_albums,
     visible_films,
+    visible_shows,
 )
+from dabox.names import natural_key
 
 ART_PREFIX = "/box/art"
+# Where Play starts in each group: {group id: index of the next video}.
+_GROUP_RESUME_KEY = "group_resume"
 
 router = APIRouter(prefix="/box", dependencies=[Depends(require_box_client)])
 
@@ -77,6 +86,47 @@ def films(services: Services = Depends(get_services)) -> list[FilmView]:
     ]
 
 
+@router.get("/videos")
+def videos(services: Services = Depends(get_services)) -> list[VideoTileView]:
+    """Single videos and groups together, by name (DESIGN_CORRECTIONS_2.md, 2.3)."""
+    listing = Listing(services)
+    library = services.library.library
+    tiles = [
+        video_tile(film, listing.hidden_ids, listing.metadata.get(film.id), ART_PREFIX, services.durations.get(film.fingerprint))
+        for film in visible_films(library, listing.hidden_ids, listing.show_hidden, listing.usb_allowed)
+    ] + [
+        group_tile(show, listing.hidden_ids, listing.metadata.get(show.id), ART_PREFIX)
+        for show in visible_shows(library, listing.hidden_ids, listing.show_hidden, listing.usb_allowed)
+    ]
+    return sorted(tiles, key=lambda tile: natural_key(tile.title))
+
+
+class ResumeRequest(BaseModel):
+    # The video to start from next time.
+    index: int
+
+
+@router.get("/groups/{group_id}")
+def group(group_id: str, services: Services = Depends(get_services)) -> GroupDetailView:
+    listing = Listing(services)
+    for show in visible_shows(services.library.library, listing.hidden_ids, listing.show_hidden, listing.usb_allowed):
+        if show.id == group_id:
+            resume = (services.store.get(_GROUP_RESUME_KEY) or {}).get(group_id, 0)
+            return group_detail_view(show, listing.hidden_ids, listing.metadata.get(show.id), ART_PREFIX, services.durations.all(), resume)
+    raise HTTPException(status_code=404, detail="No such group")
+
+
+@router.post("/groups/{group_id}/resume")
+def set_group_resume(group_id: str, body: ResumeRequest, services: Services = Depends(get_services)) -> None:
+    """The UI says which video Play should start from: the one after a video that ended."""
+    show = services.library.find_show(group_id)
+    if show is None:
+        raise HTTPException(status_code=404, detail="No such group")
+    resume = services.store.get(_GROUP_RESUME_KEY) or {}
+    resume[group_id] = body.index if 0 <= body.index < len(show.episodes) else 0
+    services.store.put(_GROUP_RESUME_KEY, resume)
+
+
 @router.get("/music/albums")
 def albums(artist: str | None = None, services: Services = Depends(get_services)) -> list[AlbumView]:
     """All albums, or the albums of one artist."""
@@ -104,12 +154,7 @@ def art(item_id: str, services: Services = Depends(get_services)) -> FileRespons
 
 def art_response(services: Services, item_id: str) -> FileResponse:
     """Art the parent picked or the box fetched comes first, then art next to the media."""
-    show = services.library.find_show(item_id)
-    if show is not None:
-        if show.art_path is None:
-            raise HTTPException(status_code=404, detail="No art for this show")
-        return FileResponse(show.art_path)
-    item = services.item_or_404(item_id)
+    item = services.library.find_show(item_id) or services.item_or_404(item_id)
     metadata = services.metadata.store.get(item_id)
     if metadata is not None and metadata.art_file is not None:
         cached = services.metadata.store.art_dir / metadata.art_file
@@ -120,14 +165,23 @@ def art_response(services: Services, item_id: str) -> FileResponse:
     raise HTTPException(status_code=404, detail="No art for this item")
 
 
+@router.post("/power/off")
+def power_off(services: Services = Depends(get_services)) -> None:
+    """Shut down from the TV's power menu (DESIGN_CORRECTIONS_2.md, part 9). Anyone at the TV may."""
+    services.limits.power_off_now()
+
+
 @router.post("/parent-mode/leave")
 def leave_parent_mode(services: Services = Depends(get_services)) -> None:
     services.box_state.set_parent_mode(False)
 
 
 @router.get("/admin-qr.png")
-def admin_qr(services: Services = Depends(get_services)) -> Response:
+def admin_qr(target: str | None = None, services: Services = Depends(get_services)) -> Response:
+    """The admin app's address. `target=accounts` opens its key form (Settings on the TV)."""
     url = admin_urls(services.admin_port, services.network.status().ip_address)[0]
+    if target == "accounts":
+        url += "/#accounts"
     buffer = io.BytesIO()
     segno.make(url, error="m").save(buffer, kind="png", scale=10, border=2)
     return Response(content=buffer.getvalue(), media_type="image/png")

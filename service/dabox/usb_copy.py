@@ -17,8 +17,8 @@ from time import monotonic
 
 from pydantic import BaseModel
 
-from dabox.copying import CopyItem, CopyPlan, carry_over, plan_copy, run_copy
-from dabox.library import FILMS_FOLDER, GAMES_FOLDER, MUSIC_FOLDER, TV_FOLDER, ItemNamer, scan_films, scan_games, scan_music, scan_shows
+from dabox.copying import CopyItem, CopyPlan, box_group_folders, carry_over, plan_copy, run_copy
+from dabox.library import scan_root
 from dabox.metadata import MetadataStore
 from dabox.models import Album, Film, Game, Library, MediaSource, Show
 from dabox.store import Store
@@ -29,11 +29,12 @@ log = logging.getLogger(__name__)
 
 # Room the box keeps free for its database, logs and art.
 SPACE_RESERVE_BYTES = 500 * 1024 * 1024
-TREE_FOLDERS = (("films", FILMS_FOLDER), ("tv", TV_FOLDER), ("music", MUSIC_FOLDER), ("games", GAMES_FOLDER))
+# The tick list groups what the box found by kind, not by the drive's own folders.
+TREE_FOLDERS = (("videos", "Videos"), ("music", "Albums"), ("games", "Games"))
 
 
 class UsbTreeItem(BaseModel):
-    # "<folder key>:<path on the stick>", for example "films:Films/Cars (2006)".
+    # "<kind>:<item id>", for example "videos:u3f2a9c0d1e2b4a5c".
     id: str
     title: str
     subtitle: str | None
@@ -112,44 +113,42 @@ class _BoxContent:
         self.films = {film.fingerprint for film in library.films if film.source is MediaSource.BOX}
         self.albums = [{track.fingerprint for track in album.tracks} for album in library.albums if album.source is MediaSource.BOX]
         self.games = {game.fingerprint for game in library.games if game.source is MediaSource.BOX}
-        self.episodes = frozenset(episode.fingerprint for show in library.shows for episode in show.episodes)
-
-
-def _tree_id(folder_key: str, path: Path, stick: UsbStick) -> str:
-    return f"{folder_key}:{path.relative_to(stick.path)}"
+        # Box group videos: fingerprint -> the group's folder.
+        self.group_folders = box_group_folders(library)
 
 
 def _stick_item(item: CopyItem, stick: UsbStick, box: _BoxContent, media_dir: Path) -> StickItem:
+    """"On the box" goes by the files' fingerprints, never by names (DESIGN_CORRECTIONS_2.md, 3.4)."""
     match item:
         case Film():
             plan = plan_copy(item, media_dir)
-            on_box = item.fingerprint in box.films or plan.destination.exists()
-            return StickItem(_tree_id("films", item.folder, stick), "films", item, item.title, str(item.year) if item.year else None, plan, on_box)
+            on_box = item.fingerprint in box.films or item.fingerprint in box.group_folders
+            return StickItem(f"videos:{item.id}", "videos", item, item.title, str(item.year) if item.year else None, plan, on_box)
         case Show():
-            plan = plan_copy(item, media_dir, box.episodes)
-            on_box = all(episode.fingerprint in box.episodes for episode in item.episodes)
+            plan = plan_copy(item, media_dir, box.group_folders)
+            on_box = all(episode.fingerprint in box.group_folders or episode.fingerprint in box.films for episode in item.episodes)
             count = len(item.episodes)
-            return StickItem(_tree_id("tv", item.folder, stick), "tv", item, item.title, f"{count} episode{'s' * (count != 1)}", plan, on_box)
+            return StickItem(f"videos:{item.id}", "videos", item, item.title, f"{count} video{'s' * (count != 1)}", plan, on_box)
         case Album():
             plan = plan_copy(item, media_dir)
             fingerprints = {track.fingerprint for track in item.tracks}
-            on_box = any(fingerprints <= known for known in box.albums) or plan.destination.exists()
-            return StickItem(_tree_id("music", item.folder, stick), "music", item, item.title, item.artist, plan, on_box)
+            on_box = any(fingerprints <= known for known in box.albums)
+            return StickItem(f"music:{item.id}", "music", item, item.title, item.artist, plan, on_box)
         case Game():
             plan = plan_copy(item, media_dir)
-            on_box = item.fingerprint in box.games or plan.destination.exists()
-            return StickItem(_tree_id("games", item.path, stick), "games", item, item.title, SYSTEMS[item.system].name, plan, on_box)
+            on_box = item.fingerprint in box.games
+            return StickItem(f"games:{item.id}", "games", item, item.title, SYSTEMS[item.system].name, plan, on_box)
 
 
 def stick_items(stick: UsbStick, library: Library, media_dir: Path) -> list[StickItem]:
-    namer = ItemNamer(stick.path, stick)
     box = _BoxContent(library)
-    found: list[CopyItem] = [*scan_films(namer), *scan_shows(stick.path), *scan_music(namer), *scan_games(namer)]
+    scan = scan_root(stick.path, stick)
+    found: list[CopyItem] = [*scan.films, *scan.shows, *scan.albums, *scan.games]
     return [_stick_item(item, stick, box, media_dir) for item in found]
 
 
-def stick_item_for(item: Film | Album | Game, stick: UsbStick, library: Library, media_dir: Path) -> StickItem:
-    """One library item from a stick, for "Copy to the box" on a single film, album or game."""
+def stick_item_for(item: CopyItem, stick: UsbStick, library: Library, media_dir: Path) -> StickItem:
+    """One library item from a stick, for "Copy to the box" on a single video, group, album or game."""
     return _stick_item(item, stick, _BoxContent(library), media_dir)
 
 
@@ -294,8 +293,7 @@ class UsbCopier:
                 self._progress.skipped.append(item.title)
             return False
         run_copy(item.plan, self._count_bytes)
-        if not isinstance(item.item, Show):
-            carry_over(item.item, item.plan.destination, self._media_dir, self._store, self._metadata)
+        carry_over(item.item, item.plan.destination, self._media_dir, self._store, self._metadata)
         return True
 
     def _done_message(self) -> str:

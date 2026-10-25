@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from dabox.auth import LockedOut, LoginSucceeded, NoPinSet, WrongPin
 from dabox.box_api import art_response
-from dabox.copying import CopyRejected, carry_over, copy_to_box
+from dabox.copying import CopyRejected, box_group_folders, carry_over, copy_to_box
 from dabox.library import read_album_tags
 from dabox.metadata import Accounts, ArtOption, Candidate, Metadata, MetadataError
 from dabox.models import LimitSettings
@@ -24,7 +24,7 @@ from dabox.uploads import (
     music_destination,
     save_stream,
 )
-from dabox.views import AlbumView, FilmView, album_view, film_view
+from dabox.views import AlbumView, FilmView, VideoTileView, album_view, film_view, group_tile
 
 ART_PREFIX = "/api/admin/art"
 
@@ -59,6 +59,8 @@ class HiddenRequest(BaseModel):
 
 class ContentView(BaseModel):
     films: list[FilmView]
+    # Folders of several videos (DESIGN_CORRECTIONS_2.md, part 2).
+    groups: list[VideoTileView]
     albums: list[AlbumView]
 
 
@@ -89,6 +91,7 @@ class EditRequest(BaseModel):
 
 class AccountsView(BaseModel):
     tmdb_api_key_set: bool
+    screenscraper_set: bool = False
 
 
 class AccountsRequest(BaseModel):
@@ -130,7 +133,7 @@ def status(services: Services = Depends(get_services)) -> StatusView:
         parent_mode=services.box_state.parent_mode,
         setup_required=services.box_state.setup_required(),
         timezone=services.box_state.timezone,
-        film_count=len(library.films),
+        film_count=len(library.films) + len(library.shows),
         album_count=len(library.albums),
     )
 
@@ -148,6 +151,7 @@ def content(services: Services = Depends(get_services)) -> ContentView:
     library = services.library.library
     return ContentView(
         films=[film_view(film, hidden_ids, metadata.get(film.id), ART_PREFIX) for film in library.films],
+        groups=[group_tile(show, hidden_ids, metadata.get(show.id), ART_PREFIX) for show in library.shows],
         albums=[album_view(album, hidden_ids, metadata.get(album.id), ART_PREFIX) for album in library.albums],
     )
 
@@ -159,7 +163,8 @@ def art(item_id: str, services: Services = Depends(get_services)) -> FileRespons
 
 @router.post("/content/{item_id}/hidden")
 def set_hidden(item_id: str, body: HiddenRequest, services: Services = Depends(get_services)) -> None:
-    services.item_or_404(item_id)
+    if services.library.find_show(item_id) is None:
+        services.item_or_404(item_id)
     services.store.set_hidden(item_id, body.hidden)
 
 
@@ -176,12 +181,12 @@ def usb_sticks(services: Services = Depends(get_services)) -> list[UsbStick]:
 
 @router.post("/content/{item_id}/copy-to-box")
 def copy_item_to_box(item_id: str, services: Services = Depends(get_services)) -> ContentView:
-    item = services.item_or_404(item_id)
+    item = services.library.find_show(item_id) or services.item_or_404(item_id)
     media_dir = services.library.media_dir
     if services.usb_copier.running():
         raise HTTPException(status_code=409, detail="A copy from USB is running on the box. Try again when it ends.")
     try:
-        destination = copy_to_box(item, media_dir)
+        destination = copy_to_box(item, media_dir, box_group_folders(services.library.library))
     except CopyRejected as rejection:
         raise HTTPException(status_code=409, detail=str(rejection)) from rejection
     carry_over(item, destination, media_dir, services.store, services.metadata.store)
@@ -257,15 +262,18 @@ def reset_metadata(item_id: str, services: Services = Depends(get_services)) -> 
 
 @router.get("/accounts")
 def get_accounts(services: Services = Depends(get_services)) -> AccountsView:
-    return AccountsView(tmdb_api_key_set=bool(services.metadata.store.accounts().tmdb_api_key))
+    accounts = services.metadata.store.accounts()
+    return AccountsView(tmdb_api_key_set=bool(accounts.tmdb_api_key), screenscraper_set=accounts.screenscraper_set())
 
 
 @router.put("/accounts")
 def put_accounts(body: AccountsRequest, services: Services = Depends(get_services)) -> AccountsView:
     accounts = services.metadata.store.accounts()
     if body.tmdb_api_key is not None:
-        accounts = Accounts(tmdb_api_key=body.tmdb_api_key.strip())
+        # The other accounts (ScreenScraper) stay as they are.
+        accounts = accounts.model_copy(update={"tmdb_api_key": body.tmdb_api_key.strip()})
     services.metadata.save_accounts(accounts)
+    services.metadata.check_accounts()
     services.metadata_wanted.set()
     return get_accounts(services)
 
