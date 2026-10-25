@@ -10,3 +10,5 @@ ui/.godot/
 dev/usb/
 vm/work-*/
 .idea/
+LOCAL.md
+vm/local.env

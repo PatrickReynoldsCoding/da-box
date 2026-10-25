@@ -16,6 +16,14 @@
 #   vm/box-vm.sh save NAME / restore NAME / snapshots   disk snapshots (VM stopped)
 #   vm/box-vm.sh stop      shut the VM down
 #   vm/box-vm.sh destroy   delete the VM disk (keeps the OS download)
+#   vm/box-vm.sh boot fresh|setup|parent|desktop   go back to a saved state and start it:
+#       fresh    da-box just installed, the TV shows the setup screens   (snapshot "fresh")
+#       setup    setup done, PIN 1234                                     (snapshot "setup")
+#       parent   "setup", then parent mode switched on (no limits)
+#       desktop  the desktop VM before da-box: a plain Linux desktop      (snapshot "desktop")
+#
+# The VM files go in vm/work (and vm/work-desktop). DABOX_VM_HOME=/some/folder puts them there
+# instead; vm/local.env (not in git) can set it, e.g. DABOX_VM_HOME=~/vms/da-box.
 #
 # DABOX_VM=desktop vm/box-vm.sh ... works on a second VM: Ubuntu 24.04 with a LightDM desktop,
 # like Linux Mint 22. Use it to test installing over a desktop distro.
@@ -26,6 +34,9 @@ set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 repo="$(cd "$here/.." && pwd)"
+# shellcheck disable=SC1091  # optional, per machine
+[[ -f "$here/local.env" ]] && . "$here/local.env"
+vm_home="${DABOX_VM_HOME:-$here}"
 flavour="${DABOX_VM:-box}"
 
 case "$(uname -s)" in
@@ -38,13 +49,13 @@ if [[ $host == mac ]]; then arch=aarch64; debian_arch=arm64; else arch=x86_64; d
 
 case "$flavour" in
   box)
-    work="$here/work"
+    work="$vm_home/work"
     base_name="debian-13-generic-$debian_arch.qcow2"
     base_url="https://cloud.debian.org/images/cloud/trixie/latest/$base_name"
     ssh_port=2222 admin_port=8081 monitor_port=4441
     ;;
   desktop)
-    work="$here/work-desktop"
+    work="$vm_home/work-desktop"
     base_name="noble-server-cloudimg-$debian_arch.img"
     base_url="https://cloud-images.ubuntu.com/noble/current/$base_name"
     ssh_port=2223 admin_port=8082 monitor_port=4442
@@ -297,6 +308,46 @@ destroy() {
   echo "VM disk deleted."
 }
 
+# The PIN the "setup" snapshot was made with.
+VM_PIN=1234
+
+wait_for_admin_app() {
+  for _ in $(seq 1 90); do
+    curl -sf -o /dev/null "http://127.0.0.1:$admin_port/api/admin/session" && return 0
+    sleep 2
+  done
+  echo "The admin app did not come up." >&2
+  return 1
+}
+
+parent_mode_on() {
+  local cookies="$work/cookies.txt"
+  wait_for_admin_app
+  curl -sf -c "$cookies" -H 'Content-Type: application/json' -d "{\"pin\": \"$VM_PIN\"}" \
+    "http://127.0.0.1:$admin_port/api/admin/login" >/dev/null
+  curl -sf -b "$cookies" -H 'Content-Type: application/json' -d '{"enabled": true}' \
+    "http://127.0.0.1:$admin_port/api/admin/parent-mode" >/dev/null
+  rm -f "$cookies"
+  echo "Parent mode is on until the service restarts."
+}
+
+boot() {
+  local name="$1" snapshot
+  case "$name" in
+    fresh|setup|desktop) snapshot="$name" ;;
+    parent) snapshot=setup ;;
+    *) echo "boot fresh, setup, parent or desktop" >&2; exit 2 ;;
+  esac
+  if [[ $name == desktop && $flavour != desktop ]]; then exec env DABOX_VM=desktop "$0" boot desktop; fi
+  if [[ $name != desktop && $flavour != box ]]; then exec env DABOX_VM=box "$0" boot "$name"; fi
+  stop
+  for _ in $(seq 1 30); do is_running || break; sleep 1; done
+  snapshot -a "$snapshot"
+  start
+  [[ $name == parent ]] && parent_mode_on
+  return 0
+}
+
 command="${1:-}"
 shift || true
 case "$command" in
@@ -315,5 +366,6 @@ case "$command" in
   stop) stop ;;
   kill) monitor_command "quit" ;;
   destroy) destroy ;;
-  *) sed -n '2,26p' "$0"; exit 2 ;;
+  boot) boot "${1:-}" ;;
+  *) sed -n '2,35p' "$0"; exit 2 ;;
 esac
